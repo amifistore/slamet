@@ -420,7 +420,8 @@ def admin_topup_action(update: Update, context: CallbackContext):
     dp.add_handler(topup_conv)
     dp.add_handler(admin_conv)
 # ... [handler lain tetap]
-    # Tambahkan handler di bawah pada bagian main.py (daftar handler)
+   # ... [import dan fungsi di atas tetap seperti punyamu] ...
+
 def cekstatus(update: Update, context: CallbackContext):
     if not context.args:
         update.message.reply_text("Format: /cekstatus <reffid>")
@@ -438,8 +439,73 @@ def cekstatus(update: Update, context: CallbackContext):
     except Exception as e:
         update.message.reply_text(f"Gagal cek status: {e}")
 
-# Tambahkan ke dispatcher:
-dp.add_handler(CommandHandler('cekstatus', cekstatus))
+def main():
+    db.init_db()
+    updater = Updater(cfg["TOKEN"], use_context=True)
+    dp = updater.dispatcher
+
+    # Order conversation
+    order_conv = ConversationHandler(
+        entry_points=[CallbackQueryHandler(order_start, pattern='^order_start$')],
+        states={
+            ORDER_PILIH_PRODUK: [
+                CallbackQueryHandler(order_detail_callback, pattern="^order_detail\\|"),
+            ],
+            ORDER_INPUT_TUJUAN: [MessageHandler(Filters.text & ~Filters.command, order_input_tujuan)],
+            ORDER_KONFIRMASI: [
+                CallbackQueryHandler(order_confirm_callback, pattern="^order_confirm$"),
+                CallbackQueryHandler(main_menu_callback, pattern="^main_menu$"),
+            ],
+        },
+        fallbacks=[
+            CallbackQueryHandler(main_menu_callback, pattern="^main_menu$"),
+            CommandHandler('start', start),
+        ]
+    )
+
+    topup_conv = ConversationHandler(
+        entry_points=[CallbackQueryHandler(topup_start, pattern='^topup_start$')],
+        states={
+            TOPUP_AMOUNT: [MessageHandler(Filters.text & ~Filters.command, topup_amount_step)],
+            TOPUP_UPLOAD: [MessageHandler(Filters.photo, topup_upload_step)],
+        },
+        fallbacks=[
+            CallbackQueryHandler(main_menu_callback, pattern="^main_menu$"),
+            CommandHandler('start', start),
+        ]
+    )
+
+    admin_conv = ConversationHandler(
+        entry_points=[CallbackQueryHandler(admin_panel, pattern='^admin_panel$')],
+        states={
+            ADMIN_PANEL: [CallbackQueryHandler(admin_topup_pending, pattern='^admin_topup_pending$')],
+            ADMIN_TOPUP_PENDING: [CallbackQueryHandler(admin_topup_detail, pattern='^admin_topup_detail\\|')],
+            ADMIN_APPROVE_TOPUP: [CallbackQueryHandler(admin_topup_action, pattern='^admin_topup_action\\|')],
+        },
+        fallbacks=[
+            CallbackQueryHandler(main_menu_callback, pattern="^main_menu$"),
+            CommandHandler('start', start),
+        ]
+    )
+
+    dp.add_handler(order_conv)
+    dp.add_handler(topup_conv)
+    dp.add_handler(admin_conv)
+    dp.add_handler(CommandHandler('start', start))
+    dp.add_handler(CommandHandler('cekstatus', cekstatus))
+    dp.add_handler(CallbackQueryHandler(callback_router))
+    dp.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_text))
+
+    # Jalankan webhook Flask di thread terpisah
+    flask_thread = threading.Thread(target=webhook.app.run, kwargs={
+        "host": "0.0.0.0",
+        "port": cfg["WEBHOOK_PORT"]
+    })
+    flask_thread.daemon = True
+    flask_thread.start()
+
+    updater.start_polling()
+    updater.idle()
 
 if __name__ == "__main__":
     main()
