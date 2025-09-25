@@ -308,16 +308,16 @@ rate_limiter = RateLimiter()
 
 # ========== WEBHOOK ==========
 app = Flask(__name__)
-from re import compile as re_compile
+import re
 
-RX = re_compile(
+RX = re.compile(
     r'RC=(?P<reffid>[a-f0-9-]+)\s+TrxID=(?P<trxid>\d+)\s+'
     r'(?P<produk>[A-Z0-9]+)\.(?P<tujuan>\d+)\s+'
     r'(?P<status_text>[A-Za-z]+)\s*'
     r'(?P<keterangan>.+?)'
     r'(?:\s+Saldo[\s\S]*?)?'
     r'(?:\bresult=(?P<status_code>\d+))?\s*>?$',
-    re_compile.I | re_compile.DOTALL
+    re.I | re.DOTALL
 )
 
 updater = None
