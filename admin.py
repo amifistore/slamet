@@ -1,230 +1,201 @@
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, ParseMode
-from db import (
-    get_all_produk, add_produk, update_produk, delete_produk, 
-    get_produk_by_kode, get_all_users, get_saldo,
-    get_topup_pending_all, update_topup_status, tambah_saldo, get_topup_by_id
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.orm import Session
+from typing import List, Optional
+from pydantic import BaseModel
+from fastapi.security import OAuth2PasswordBearer
+import jwt
+
+from db import get_db, User, Transaction  # sesuaikan dengan project Anda
+
+SECRET_KEY = "YOUR_SECRET_KEY"
+ALGORITHM = "HS256"
+
+router = APIRouter(
+    prefix="/admin",
+    tags=["admin"]
 )
 
-def admin_panel(update, context):
-    query = update.callback_query
-    query.edit_message_text(
-        "👑 <b>PANEL ADMIN</b>\nPilih menu admin:",
-        parse_mode=ParseMode.HTML,
-        reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("➕ Tambah Produk", callback_data='admin_add_produk')],
-            [InlineKeyboardButton("📝 Kelola Produk", callback_data='admin_list_produk')],
-            [InlineKeyboardButton("👤 Data User", callback_data='admin_cekuser')],
-            [InlineKeyboardButton("💰 Lihat Saldo", callback_data='lihat_saldo')],
-            [InlineKeyboardButton("🕓 TopUp Pending", callback_data='admin_topup_pending')],
-            [InlineKeyboardButton("🏠 Menu Utama", callback_data='main_menu')],
-        ])
-    )
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
-def admin_add_produk(update, context):
-    query = update.callback_query
-    context.user_data.clear()
-    query.edit_message_text(
-        "🆕 <b>Tambah Produk</b>\nKetik:\n<code>/produkbaru KODE NAMA HARGA DESKRIPSI</code>\nContoh:\n"
-        "<code>/produkbaru PUL10 Pulsa10rb 11000 Pulsa elektrik 10rb</code>",
-        parse_mode=ParseMode.HTML,
-        reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("🔙 Kembali", callback_data="admin_panel")]
-        ])
-    )
+# ========== SCHEMAS ==========
+class UserAdminOut(BaseModel):
+    id: int
+    username: str
+    email: Optional[str]
+    saldo: int
+    kuota: Optional[int]
+    is_active: bool
+    role: Optional[str]
 
-def cmd_produkbaru(update, context):
-    if len(context.args) < 4:
-        update.message.reply_text("Format salah.\nContoh:\n<code>/produkbaru PUL10 Pulsa10rb 11000 Pulsa elektrik 10rb</code>", parse_mode=ParseMode.HTML)
-        return
-    kode, nama, harga, *desk = context.args
+    class Config:
+        orm_mode = True
+
+class EditUserRequest(BaseModel):
+    username: Optional[str]
+    email: Optional[str]
+    saldo: Optional[int]
+    kuota: Optional[int]
+    is_active: Optional[bool]
+    role: Optional[str]
+
+class CreateUserRequest(BaseModel):
+    username: str
+    email: Optional[str]
+    password: str
+    saldo: Optional[int] = 0
+    kuota: Optional[int] = 0
+    role: Optional[str] = "user"
+    is_active: Optional[bool] = True
+
+class KuotaRequest(BaseModel):
+    kuota: int
+
+class TransactionAdminOut(BaseModel):
+    id: int
+    user_id: int
+    type: str
+    amount: int
+    timestamp: str
+
+    class Config:
+        orm_mode = True
+
+# ========== AUTH ADMIN ONLY ==========
+def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
     try:
-        harga = float(harga)
-    except Exception:
-        update.message.reply_text("Harga harus angka!\nContoh: <code>/produkbaru PUL10 Pulsa10rb 11000 Deskripsi</code>", parse_mode=ParseMode.HTML)
-        return
-    deskripsi = " ".join(desk)
-    add_produk(kode, nama, harga, deskripsi, 1)
-    update.message.reply_text(f"✅ Produk <b>{nama}</b> berhasil ditambah & diaktifkan!", parse_mode=ParseMode.HTML)
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id: int = payload.get("sub")
+        if user_id is None:
+            raise HTTPException(status_code=401, detail="Invalid token")
+        user = db.query(User).filter(User.id == user_id).first()
+        if user is None:
+            raise HTTPException(status_code=404, detail="User not found")
+        return user
+    except jwt.PyJWTError:
+        raise HTTPException(status_code=401, detail="Invalid token")
 
-def admin_list_produk(update, context):
-    query = update.callback_query
-    rows = get_all_produk(show_nonaktif=True)
-    if not rows:
-        msg = "❌ Tidak ada produk di database."
-    else:
-        msg = "📝 <b>Kelola Produk</b>\nKlik produk untuk edit/hapus/ubah status:\n\n"
-        for kode, nama, harga, deskripsi, aktif in rows:
-            status = "✅" if aktif else "❌"
-            msg += f"{status} <b>{nama}</b> | Kode: <code>{kode}</code> | Rp {harga:,.0f}\n"
-    keyboard = [
-        [InlineKeyboardButton(f"{nama} [{kode}]", callback_data=f"admin_edit_produk_{kode}")]
-        for kode, nama, harga, deskripsi, aktif in rows
-    ]
-    keyboard.append([InlineKeyboardButton("🔙 Kembali", callback_data="admin_panel")])
-    query.edit_message_text(msg, parse_mode=ParseMode.HTML, reply_markup=InlineKeyboardMarkup(keyboard))
+def admin_required(current_user: User = Depends(get_current_user)):
+    if getattr(current_user, "role", None) != "admin":
+        raise HTTPException(status_code=403, detail="Hanya admin yang boleh mengakses menu ini.")
+    return current_user
 
-def admin_edit_produk(update, context):
-    query = update.callback_query
-    kode = query.data.replace("admin_edit_produk_", "")
-    row = get_produk_by_kode(kode)
-    if not row:
-        query.edit_message_text("Produk tidak ditemukan.", reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("🔙 Kembali", callback_data="admin_list_produk")]
-        ]))
-        return
-    kode, nama, harga, deskripsi, aktif = row
-    status = "Aktif ✅" if aktif else "Nonaktif ❌"
-    query.edit_message_text(
-        f"📝 <b>Edit Produk</b>\n"
-        f"Kode: <code>{kode}</code>\nNama: <b>{nama}</b>\nHarga: <b>Rp {harga:,.0f}</b>\nDeskripsi: {deskripsi}\nStatus: {status}",
-        parse_mode=ParseMode.HTML,
-        reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("✏️ Edit Nama", callback_data=f"admin_edit_nama_{kode}"),
-             InlineKeyboardButton("💵 Edit Harga", callback_data=f"admin_edit_harga_{kode}")],
-            [InlineKeyboardButton("📝 Edit Deskripsi", callback_data=f"admin_edit_desk_{kode}")],
-            [InlineKeyboardButton("✅ Aktifkan" if not aktif else "❌ Nonaktifkan", callback_data=f"admin_toggle_{kode}")],
-            [InlineKeyboardButton("🗑️ Hapus Produk", callback_data=f"admin_del_{kode}")],
-            [InlineKeyboardButton("🔙 Kembali", callback_data="admin_list_produk")]
-        ])
+# ========== ENDPOINTS ADMIN ==========
+
+# List all users
+@router.get("/users", response_model=List[UserAdminOut])
+def list_users(db: Session = Depends(get_db), current_user: User = Depends(admin_required)):
+    return db.query(User).all()
+
+# Create user
+@router.post("/users", response_model=UserAdminOut)
+def create_user(request: CreateUserRequest, db: Session = Depends(get_db), current_user: User = Depends(admin_required)):
+    if db.query(User).filter_by(username=request.username).first():
+        raise HTTPException(status_code=400, detail="Username sudah terdaftar")
+    from passlib.context import CryptContext
+    pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+    hashed_pw = pwd_context.hash(request.password)
+    new_user = User(
+        username=request.username,
+        email=request.email,
+        password=hashed_pw,
+        saldo=request.saldo,
+        kuota=request.kuota,
+        role=request.role,
+        is_active=request.is_active
     )
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+    return new_user
 
-def admin_edit_nama(update, context):
-    query = update.callback_query
-    kode = query.data.replace("admin_edit_nama_", "")
-    context.user_data["edit_kode"] = kode
-    query.edit_message_text(
-        f"✏️ <b>Edit Nama Produk</b>\nKetik:\n<code>/editnama NAMABARU</code>",
-        parse_mode=ParseMode.HTML,
-        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Kembali", callback_data=f"admin_edit_produk_{kode}")]])
-    )
+# Edit user (by id)
+@router.put("/users/{user_id}", response_model=UserAdminOut)
+def edit_user(
+    user_id: int,
+    request: EditUserRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(admin_required)
+):
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User tidak ditemukan")
+    for attr, value in request.dict(exclude_unset=True).items():
+        setattr(user, attr, value)
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user
 
-def admin_edit_harga(update, context):
-    query = update.callback_query
-    kode = query.data.replace("admin_edit_harga_", "")
-    context.user_data["edit_kode"] = kode
-    query.edit_message_text(
-        f"💵 <b>Edit Harga Produk</b>\nKetik:\n<code>/editharga HARGABARU</code>",
-        parse_mode=ParseMode.HTML,
-        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Kembali", callback_data=f"admin_edit_produk_{kode}")]])
-    )
+# Hapus user
+@router.delete("/users/{user_id}")
+def delete_user(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(admin_required)
+):
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User tidak ditemukan")
+    db.delete(user)
+    db.commit()
+    return {"msg": "User berhasil dihapus"}
 
-def admin_edit_desk(update, context):
-    query = update.callback_query
-    kode = query.data.replace("admin_edit_desk_", "")
-    context.user_data["edit_kode"] = kode
-    query.edit_message_text(
-        f"📝 <b>Edit Deskripsi Produk</b>\nKetik:\n<code>/editdesk DESKRIPSI_BARU</code>",
-        parse_mode=ParseMode.HTML,
-        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Kembali", callback_data=f"admin_edit_produk_{kode}")]])
-    )
+# Edit kuota user (by id, endpoint khusus)
+@router.put("/users/{user_id}/kuota", response_model=UserAdminOut)
+def edit_kuota(
+    user_id: int,
+    req: KuotaRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(admin_required)
+):
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User tidak ditemukan")
+    user.kuota = req.kuota
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user
 
-def admin_toggle(update, context):
-    query = update.callback_query
-    kode = query.data.replace("admin_toggle_", "")
-    row = get_produk_by_kode(kode)
-    if not row:
-        query.edit_message_text("Produk tidak ditemukan.", reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("🔙 Kembali", callback_data="admin_list_produk")]
-        ]))
-        return
-    aktif = 0 if row[4] else 1
-    update_produk(kode, aktif=aktif)
-    query.answer("Status produk diubah.")
-    admin_edit_produk(update, context)
+# List transaksi semua user / per user
+@router.get("/transaksi", response_model=List[TransactionAdminOut])
+def list_all_transaction(
+    user_id: Optional[int] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(admin_required)
+):
+    q = db.query(Transaction)
+    if user_id:
+        q = q.filter(Transaction.user_id == user_id)
+    return q.order_by(Transaction.timestamp.desc()).all()
 
-def admin_del(update, context):
-    query = update.callback_query
-    kode = query.data.replace("admin_del_", "")
-    delete_produk(kode)
-    query.answer("Produk dihapus!")
-    admin_list_produk(update, context)
+# (Optional) Aktif/nonaktifkan user
+@router.put("/users/{user_id}/aktifkan", response_model=UserAdminOut)
+def aktifkan_user(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(admin_required)
+):
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User tidak ditemukan")
+    user.is_active = True
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user
 
-def cmd_editnama(update, context):
-    kode = context.user_data.get("edit_kode")
-    if not kode or not context.args:
-        update.message.reply_text("Format: /editnama NAMABARU")
-        return
-    nama = " ".join(context.args)
-    update_produk(kode, nama=nama)
-    update.message.reply_text("✅ Nama produk diubah.")
-
-def cmd_editharga(update, context):
-    kode = context.user_data.get("edit_kode")
-    if not kode or not context.args:
-        update.message.reply_text("Format: /editharga HARGABARU")
-        return
-    try:
-        harga = float(context.args[0])
-    except Exception:
-        update.message.reply_text("Harga salah.")
-        return
-    update_produk(kode, harga=harga)
-    update.message.reply_text("✅ Harga produk diubah.")
-
-def cmd_editdesk(update, context):
-    kode = context.user_data.get("edit_kode")
-    if not kode or not context.args:
-        update.message.reply_text("Format: /editdesk DESKRIPSI_BARU")
-        return
-    deskripsi = " ".join(context.args)
-    update_produk(kode, deskripsi=deskripsi)
-    update.message.reply_text("✅ Deskripsi produk diubah.")
-
-def admin_cekuser(update, context):
-    query = update.callback_query
-    users = get_all_users()
-    msg = f"👤 <b>Data User</b>\nTotal: {len(users)} user\n\n"
-    for u in users:
-        msg += f"- {u[2]} (@{u[1]}) - ID: <code>{u[0]}</code>\n"
-    query.edit_message_text(msg, parse_mode=ParseMode.HTML, reply_markup=InlineKeyboardMarkup([
-        [InlineKeyboardButton("🔙 Kembali", callback_data='admin_panel')]
-    ]))
-
-def lihat_saldo(update, context):
-    query = update.callback_query
-    users = get_all_users()
-    msg = f"💰 <b>Saldo Semua User</b>\n\n"
-    for u in users:
-        saldo = get_saldo(u[0])
-        msg += f"{u[2]}: Rp {saldo:,.0f}\n"
-    query.edit_message_text(msg, parse_mode=ParseMode.HTML, reply_markup=InlineKeyboardMarkup([
-        [InlineKeyboardButton("🔙 Kembali", callback_data='admin_panel')]
-    ]))
-
-def admin_topup_pending(update, context):
-    query = update.callback_query
-    items = get_topup_pending_all(10)
-    msg = "🕓 <b>TopUp Pending</b>\n\n"
-    keyboard = []
-    if not items:
-        msg += "Tidak ada top up menunggu verifikasi."
-    else:
-        for r in items:
-            msg += f"⏳ User: {r[3]} (@{r[2]})\nNominal: Rp {r[4]:,.0f}\nWaktu: {r[5]}\nID: <code>{r[0]}</code>\n\n"
-            keyboard.append([InlineKeyboardButton(f"Approve {r[3]} Rp{int(r[4])}", callback_data=f"admin_approve_topup_{r[0]}")])
-            keyboard.append([InlineKeyboardButton(f"Tolak {r[3]} Rp{int(r[4])}", callback_data=f"admin_reject_topup_{r[0]}")])
-    keyboard.append([InlineKeyboardButton("🔙 Kembali", callback_data="admin_panel")])
-    query.edit_message_text(msg, parse_mode=ParseMode.HTML, reply_markup=InlineKeyboardMarkup(keyboard))
-
-def admin_approve_topup(update, context):
-    query = update.callback_query
-    topup_id = query.data.replace("admin_approve_topup_", "")
-    row = get_topup_by_id(topup_id)
-    if not row or row[6] != "pending":
-        query.answer("Sudah diproses/tidak ditemukan.", show_alert=True)
-        return
-    update_topup_status(topup_id, "approved")
-    tambah_saldo(row[1], row[4])
-    query.answer("Berhasil di-approve.", show_alert=True)
-    admin_topup_pending(update, context)
-
-def admin_reject_topup(update, context):
-    query = update.callback_query
-    topup_id = query.data.replace("admin_reject_topup_", "")
-    row = get_topup_by_id(topup_id)
-    if not row or row[6] != "pending":
-        query.answer("Sudah diproses/tidak ditemukan.", show_alert=True)
-        return
-    update_topup_status(topup_id, "rejected")
-    query.answer("Top up ditolak!", show_alert=True)
-    admin_topup_pending(update, context)
+@router.put("/users/{user_id}/nonaktifkan", response_model=UserAdminOut)
+def nonaktifkan_user(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(admin_required)
+):
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User tidak ditemukan")
+    user.is_active = False
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user
