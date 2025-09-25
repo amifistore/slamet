@@ -1,7 +1,8 @@
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, ParseMode
 from db import (
     get_all_produk, add_produk, update_produk, delete_produk, 
-    get_produk_by_kode, get_all_users, get_saldo
+    get_produk_by_kode, get_all_users, get_saldo,
+    get_topup_pending_all, update_topup_status, tambah_saldo, get_topup_by_id
 )
 
 def admin_panel(update, context):
@@ -14,6 +15,7 @@ def admin_panel(update, context):
             [InlineKeyboardButton("📝 Kelola Produk", callback_data='admin_list_produk')],
             [InlineKeyboardButton("👤 Data User", callback_data='admin_cekuser')],
             [InlineKeyboardButton("💰 Lihat Saldo", callback_data='lihat_saldo')],
+            [InlineKeyboardButton("🕓 TopUp Pending", callback_data='admin_topup_pending')],
             [InlineKeyboardButton("🏠 Menu Utama", callback_data='main_menu')],
         ])
     )
@@ -188,3 +190,41 @@ def lihat_saldo(update, context):
     query.edit_message_text(msg, parse_mode=ParseMode.HTML, reply_markup=InlineKeyboardMarkup([
         [InlineKeyboardButton("🔙 Kembali", callback_data='admin_panel')]
     ]))
+
+def admin_topup_pending(update, context):
+    query = update.callback_query
+    items = get_topup_pending_all(10)
+    msg = "🕓 <b>TopUp Pending</b>\n\n"
+    keyboard = []
+    if not items:
+        msg += "Tidak ada top up menunggu verifikasi."
+    else:
+        for r in items:
+            msg += f"⏳ User: {r[3]} (@{r[2]})\nNominal: Rp {r[4]:,.0f}\nWaktu: {r[5]}\nID: <code>{r[0]}</code>\n\n"
+            keyboard.append([InlineKeyboardButton(f"Approve {r[3]} Rp{int(r[4])}", callback_data=f"admin_approve_topup_{r[0]}")])
+            keyboard.append([InlineKeyboardButton(f"Tolak {r[3]} Rp{int(r[4])}", callback_data=f"admin_reject_topup_{r[0]}")])
+    keyboard.append([InlineKeyboardButton("🔙 Kembali", callback_data="admin_panel")])
+    query.edit_message_text(msg, parse_mode=ParseMode.HTML, reply_markup=InlineKeyboardMarkup(keyboard))
+
+def admin_approve_topup(update, context):
+    query = update.callback_query
+    topup_id = query.data.replace("admin_approve_topup_", "")
+    row = get_topup_by_id(topup_id)
+    if not row or row[6] != "pending":
+        query.answer("Sudah diproses/tidak ditemukan.", show_alert=True)
+        return
+    update_topup_status(topup_id, "approved")
+    tambah_saldo(row[1], row[4])
+    query.answer("Berhasil di-approve.", show_alert=True)
+    admin_topup_pending(update, context)
+
+def admin_reject_topup(update, context):
+    query = update.callback_query
+    topup_id = query.data.replace("admin_reject_topup_", "")
+    row = get_topup_by_id(topup_id)
+    if not row or row[6] != "pending":
+        query.answer("Sudah diproses/tidak ditemukan.", show_alert=True)
+        return
+    update_topup_status(topup_id, "rejected")
+    query.answer("Top up ditolak!", show_alert=True)
+    admin_topup_pending(update, context)
