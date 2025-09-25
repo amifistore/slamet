@@ -1,6 +1,5 @@
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, ParseMode
-from db import tambah_user, get_saldo, get_riwayat_user, get_produk_override
-from provider import get_products
+from db import tambah_user, get_saldo, get_all_produk
 
 def get_menu(uid):
     menu = [
@@ -30,17 +29,11 @@ def handle_text(update, context):
 
 def cek_stok_menu(update, context):
     query = update.callback_query
-    produk_list = get_products()
-    msg = "📦 <b>Info Stok Produk</b>\n\n"
-    if not produk_list:
-        msg += "Tidak ada produk ditemukan."
+    rows = get_all_produk(show_nonaktif=False)
+    msg = "📦 <b>Info Stok Produk (Aktif)</b>\n\n"
+    if not rows:
+        msg += "Tidak ada produk aktif."
     else:
-        for produk in produk_list:
-            kode = produk.get('kode') or produk.get('kode_produk') or produk.get('sku') or "-"
-            nama = produk.get('nama') or produk.get('product_name') or produk.get('name') or "-"
-            harga = produk.get('harga') or produk.get('price') or 0
-            local = get_produk_override(kode)
-            if local.get("harga") is not None:
-                harga = local["harga"]
-            msg += f"🟢 <b>{nama}</b>\nKode: <code>{kode}</code>\nHarga: <b>Rp {float(harga):,.0f}</b>\n\n"
+        for kode, nama, harga, deskripsi, aktif in rows:
+            msg += f"🟢 <b>{nama}</b>\nKode: <code>{kode}</code>\nHarga: <b>Rp {float(harga):,.0f}</b>\nDesk: {deskripsi or '-'}\n\n"
     query.edit_message_text(msg, parse_mode=ParseMode.HTML, reply_markup=get_menu(query.from_user.id))
