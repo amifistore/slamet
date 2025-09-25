@@ -167,3 +167,24 @@ def cmd_editdesk(update, context):
     deskripsi = " ".join(context.args)
     update_produk(kode, deskripsi=deskripsi)
     update.message.reply_text("✅ Deskripsi produk diubah.")
+
+def admin_cekuser(update, context):
+    query = update.callback_query
+    users = get_all_users()
+    msg = f"👤 <b>Data User</b>\nTotal: {len(users)} user\n\n"
+    for u in users:
+        msg += f"- {u[2]} (@{u[1]}) - ID: <code>{u[0]}</code>\n"
+    query.edit_message_text(msg, parse_mode=ParseMode.HTML, reply_markup=InlineKeyboardMarkup([
+        [InlineKeyboardButton("🔙 Kembali", callback_data='admin_panel')]
+    ]))
+
+def lihat_saldo(update, context):
+    query = update.callback_query
+    users = get_all_users()
+    msg = f"💰 <b>Saldo Semua User</b>\n\n"
+    for u in users:
+        saldo = get_saldo(u[0])
+        msg += f"{u[2]}: Rp {saldo:,.0f}\n"
+    query.edit_message_text(msg, parse_mode=ParseMode.HTML, reply_markup=InlineKeyboardMarkup([
+        [InlineKeyboardButton("🔙 Kembali", callback_data='admin_panel')]
+    ]))
