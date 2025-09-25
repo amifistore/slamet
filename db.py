@@ -26,6 +26,19 @@ def init_db():
             user_id INTEGER PRIMARY KEY, saldo REAL DEFAULT 0)""")
         c.execute("""CREATE TABLE IF NOT EXISTS riwayat_transaksi (
             id TEXT PRIMARY KEY, user_id INTEGER, produk TEXT, tujuan TEXT, harga REAL, waktu TEXT, status_text TEXT, keterangan TEXT)""")
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS topup_pending (
+                id TEXT PRIMARY KEY,
+                user_id INTEGER,
+                username TEXT,
+                nama TEXT,
+                nominal REAL,
+                waktu TEXT,
+                status TEXT,
+                bukti_file_id TEXT,
+                bukti_caption TEXT
+            )
+        """)
         conn.commit()
         conn.close()
 
@@ -136,3 +149,59 @@ def kurang_saldo(user_id, amount):
         c.execute("UPDATE saldo SET saldo=saldo-? WHERE user_id=?", (amount, user_id))
         conn.commit()
         conn.close()
+
+# ---- TOPUP ----
+def insert_topup_pending(id, user_id, username, nama, nominal, waktu, status):
+    with db_lock:
+        conn = get_conn()
+        c = conn.cursor()
+        c.execute("""INSERT INTO topup_pending
+            (id, user_id, username, nama, nominal, waktu, status, bukti_file_id, bukti_caption)
+            VALUES (?, ?, ?, ?, ?, ?, ?, '', '')""",
+            (id, user_id, username, nama, nominal, waktu, status))
+        conn.commit()
+        conn.close()
+
+def update_topup_bukti(id, bukti_file_id, bukti_caption):
+    with db_lock:
+        conn = get_conn()
+        c = conn.cursor()
+        c.execute("UPDATE topup_pending SET bukti_file_id=?, bukti_caption=? WHERE id=?",
+                  (bukti_file_id, bukti_caption, id))
+        conn.commit()
+        conn.close()
+
+def update_topup_status(id, status):
+    with db_lock:
+        conn = get_conn()
+        c = conn.cursor()
+        c.execute("UPDATE topup_pending SET status=? WHERE id=?", (status, id))
+        conn.commit()
+        conn.close()
+
+def get_topup_pending_by_user(user_id, limit=10):
+    with db_lock:
+        conn = get_conn()
+        c = conn.cursor()
+        c.execute("""SELECT * FROM topup_pending WHERE user_id=? ORDER BY waktu DESC LIMIT ?""", (user_id, limit))
+        rows = c.fetchall()
+        conn.close()
+        return rows
+
+def get_topup_pending_all(limit=10):
+    with db_lock:
+        conn = get_conn()
+        c = conn.cursor()
+        c.execute("""SELECT * FROM topup_pending WHERE status='pending' ORDER BY waktu DESC LIMIT ?""", (limit,))
+        rows = c.fetchall()
+        conn.close()
+        return rows
+
+def get_topup_by_id(id):
+    with db_lock:
+        conn = get_conn()
+        c = conn.cursor()
+        c.execute("SELECT * FROM topup_pending WHERE id=?", (id,))
+        row = c.fetchone()
+        conn.close()
+        return row
