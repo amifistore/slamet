@@ -54,8 +54,34 @@ def init_db():
             id TEXT PRIMARY KEY, user_id INTEGER, username TEXT, nama TEXT, nominal REAL, waktu TEXT, status TEXT, bukti_file_id TEXT, bukti_caption TEXT)""")
         c.execute("""CREATE TABLE IF NOT EXISTS kode_unik_topup (
             kode TEXT PRIMARY KEY, user_id INTEGER, nominal REAL, digunakan INTEGER DEFAULT 0, dibuat_pada TEXT, digunakan_pada TEXT)""")
+        c.execute("""CREATE TABLE IF NOT EXISTS produk_local (
+            kode TEXT PRIMARY KEY,
+            harga REAL,
+            deskripsi TEXT
+        )""")
         conn.commit()
         conn.close()
+
+def set_produk_local(kode, harga=None, deskripsi=None):
+    with db_lock:
+        conn = get_conn()
+        c = conn.cursor()
+        c.execute("INSERT OR IGNORE INTO produk_local (kode, harga, deskripsi) VALUES (?, NULL, NULL)", (kode,))
+        if harga is not None:
+            c.execute("UPDATE produk_local SET harga=? WHERE kode=?", (harga, kode))
+        if deskripsi is not None:
+            c.execute("UPDATE produk_local SET deskripsi=? WHERE kode=?", (deskripsi, kode))
+        conn.commit()
+        conn.close()
+
+def get_produk_override(kode):
+    with db_lock:
+        conn = get_conn()
+        c = conn.cursor()
+        c.execute("SELECT harga, deskripsi FROM produk_local WHERE kode=?", (kode,))
+        row = c.fetchone()
+        conn.close()
+        return {"harga": row[0], "deskripsi": row[1]} if row else {}
 
 def tambah_user(user_id, username, nama):
     with db_lock:
@@ -481,8 +507,14 @@ def menu_router(update, context):
                 nama = produk.get('nama') or produk.get('product_name') or produk.get('name') or "-"
                 harga = produk.get('harga') or produk.get('price') or 0
                 status = produk.get('status', 'Tersedia')
+                deskripsi = produk.get('deskripsi') or produk.get('desc') or "-"
+                local = get_produk_override(kode)
+                if local.get("harga") is not None:
+                    harga = local["harga"]
+                if local.get("deskripsi"):
+                    deskripsi = local["deskripsi"]
                 emoji = "✅" if status == 'Tersedia' else "❌"
-                msg += f"{emoji} [{kode}] {nama} - Rp {float(harga):,.0f} ({status})\n"
+                msg += f"{emoji} [{kode}] {nama} - Rp {float(harga):,.0f} ({status})\nDeskripsi: {deskripsi}\n"
         query.edit_message_text(msg, parse_mode=ParseMode.HTML, reply_markup=get_menu(user.id))
     elif data == "my_kode_unik":
         items = get_kode_unik_user(user.id, 5)
@@ -529,14 +561,13 @@ def menu_router(update, context):
         context.user_data["edit_kode_produk"] = kode_produk
         query.edit_message_text(
             f"📝 <b>Edit Produk {kode_produk}</b>\nKetik:\n\n"
-            "<b>/editharga HARGA_BARU</b> untuk ubah harga\n"
-            "<b>/editdesk DESKRIPSI_BARU</b> untuk ubah deskripsi",
+            "<b>/editharga HARGA_BARU</b> untuk ubah harga (hanya di bot)\n"
+            "<b>/editdesk DESKRIPSI_BARU</b> untuk ubah deskripsi (hanya di bot)",
             parse_mode=ParseMode.HTML,
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("🔙 Kembali", callback_data="admin_edit_produk")]
             ])
         )
-    # ...tambahkan router admin lainnya seperti broadcast dsb...
     else:
         query.answer("Menu tidak tersedia.", show_alert=True)
 
@@ -568,8 +599,9 @@ def order_start(update, context):
         kode = produk.get('kode') or produk.get('kode_produk') or produk.get('sku') or "-"
         nama = produk.get('nama') or produk.get('product_name') or produk.get('name') or "-"
         harga = produk.get('harga') or produk.get('price') or 0
-        if not kode or not nama:
-            continue
+        local = get_produk_override(kode)
+        if local.get("harga") is not None:
+            harga = local["harga"]
         label = f"[{kode}] {nama} - Rp {float(harga):,.0f}"
         keyboard.append([InlineKeyboardButton(label, callback_data=f"order_detail|{kode}")])
     keyboard.append([InlineKeyboardButton("🔙 Kembali", callback_data="main_menu")])
@@ -589,7 +621,7 @@ def topup_start(update, context):
         reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Kembali", callback_data="main_menu")]])
     )
 
-def edit_harga(update: Update, context: CallbackContext):
+def edit_harga(update, context):
     user = update.effective_user
     if user.id not in ADMIN_IDS:
         update.message.reply_text("❌ Menu khusus admin.")
@@ -606,24 +638,10 @@ def edit_harga(update: Update, context: CallbackContext):
         update.message.reply_text("Format harga salah.")
         return
     kode_produk = context.user_data["edit_kode_produk"]
-    url = f"{PROVIDER_BASE_URL}update_produk"
-    payload = {
-        "api_key": PROVIDER_API_KEY,
-        "kode": kode_produk,
-        "harga": harga_baru
-    }
-    try:
-        r = requests.post(url, data=payload, timeout=10)
-        r.raise_for_status()
-        data = r.json()
-        if data.get("status") == True or data.get("status") == "OK":
-            update.message.reply_text("✅ Harga produk berhasil diupdate.")
-        else:
-            update.message.reply_text(f"❌ Gagal update harga: {data.get('message')}")
-    except Exception as e:
-        update.message.reply_text(f"❌ Gagal update harga: {e}")
+    set_produk_local(kode_produk, harga=harga_baru)
+    update.message.reply_text("✅ Harga produk berhasil diupdate di database lokal.")
 
-def edit_deskripsi(update: Update, context: CallbackContext):
+def edit_deskripsi(update, context):
     user = update.effective_user
     if user.id not in ADMIN_IDS:
         update.message.reply_text("❌ Menu khusus admin.")
@@ -636,22 +654,8 @@ def edit_deskripsi(update: Update, context: CallbackContext):
         return
     deskripsi_baru = " ".join(context.args)
     kode_produk = context.user_data["edit_kode_produk"]
-    url = f"{PROVIDER_BASE_URL}update_produk"
-    payload = {
-        "api_key": PROVIDER_API_KEY,
-        "kode": kode_produk,
-        "deskripsi": deskripsi_baru
-    }
-    try:
-        r = requests.post(url, data=payload, timeout=10)
-        r.raise_for_status()
-        data = r.json()
-        if data.get("status") == True or data.get("status") == "OK":
-            update.message.reply_text("✅ Deskripsi produk berhasil diupdate.")
-        else:
-            update.message.reply_text(f"❌ Gagal update deskripsi: {data.get('message')}")
-    except Exception as e:
-        update.message.reply_text(f"❌ Gagal update deskripsi: {e}")
+    set_produk_local(kode_produk, deskripsi=deskripsi_baru)
+    update.message.reply_text("✅ Deskripsi produk berhasil diupdate di database lokal.")
 
 def main():
     init_db()
