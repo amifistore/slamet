@@ -6,12 +6,12 @@ TOKEN = os.getenv("TELEGRAM_TOKEN")
 
 from telegram.ext import Updater, CommandHandler, CallbackQueryHandler, MessageHandler, Filters
 from db import init_db, get_saldo
-from user import start, handle_text, get_menu, cek_stok_menu
+from user import start, handle_text, get_menu, cek_stok_menu, topup_start, handle_photo, riwayat_topup_menu
 from admin import (
     admin_panel, admin_add_produk, admin_list_produk, admin_edit_produk,
     admin_edit_nama, admin_edit_harga, admin_edit_desk, admin_toggle, admin_del,
     cmd_produkbaru, cmd_editnama, cmd_editharga, cmd_editdesk,
-    admin_cekuser, lihat_saldo
+    admin_cekuser, lihat_saldo, admin_topup_pending, admin_approve_topup, admin_reject_topup
 )
 
 ADMIN_IDS = [int(i) for i in os.getenv("ADMIN_IDS", "").split(",") if i]
@@ -31,6 +31,10 @@ def menu_router(update, context):
         )
     elif data == "cek_stok":
         return cek_stok_menu(update, context)
+    elif data == "topup_start":
+        return topup_start(update, context)
+    elif data == "topup_riwayat":
+        return riwayat_topup_menu(update, context)
     elif data == "admin_panel" and is_admin:
         return admin_panel(update, context)
     elif data == "admin_add_produk" and is_admin:
@@ -53,6 +57,12 @@ def menu_router(update, context):
         return admin_cekuser(update, context)
     elif data == "lihat_saldo" and is_admin:
         return lihat_saldo(update, context)
+    elif data == "admin_topup_pending" and is_admin:
+        return admin_topup_pending(update, context)
+    elif data.startswith("admin_approve_topup_") and is_admin:
+        return admin_approve_topup(update, context)
+    elif data.startswith("admin_reject_topup_") and is_admin:
+        return admin_reject_topup(update, context)
 
 def main():
     init_db()
@@ -62,6 +72,7 @@ def main():
     dp.add_handler(CommandHandler('start', start))
     dp.add_handler(CallbackQueryHandler(menu_router))
     dp.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_text))
+    dp.add_handler(MessageHandler(Filters.photo, handle_photo))
     dp.add_handler(CommandHandler('produkbaru', cmd_produkbaru))
     dp.add_handler(CommandHandler('editnama', cmd_editnama))
     dp.add_handler(CommandHandler('editharga', cmd_editharga))
