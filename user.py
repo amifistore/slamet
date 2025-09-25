@@ -36,4 +36,10 @@ def cek_stok_menu(update, context):
     else:
         for kode, nama, harga, deskripsi, aktif in rows:
             msg += f"🟢 <b>{nama}</b>\nKode: <code>{kode}</code>\nHarga: <b>Rp {float(harga):,.0f}</b>\nDesk: {deskripsi or '-'}\n\n"
-    query.edit_message_text(msg, parse_mode=ParseMode.HTML, reply_markup=get_menu(query.from_user.id))
+    try:
+        query.edit_message_text(msg, parse_mode=ParseMode.HTML, reply_markup=get_menu(query.from_user.id))
+    except Exception as e:
+        if "Message is not modified" in str(e):
+            pass
+        else:
+            raise e
