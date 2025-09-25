@@ -1,5 +1,6 @@
 import sqlite3
 import threading
+from datetime import datetime
 
 DBNAME = "botdata.db"
 db_lock = threading.Lock()
@@ -11,6 +12,7 @@ def init_db():
     with db_lock:
         conn = get_conn()
         c = conn.cursor()
+        # Tabel produk (master katalog, dikontrol admin)
         c.execute("""
             CREATE TABLE IF NOT EXISTS produk (
                 kode TEXT PRIMARY KEY,
@@ -20,12 +22,16 @@ def init_db():
                 aktif INTEGER DEFAULT 1
             )
         """)
+        # Tabel user
         c.execute("""CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY, username TEXT, nama TEXT)""")
+        # Tabel saldo
         c.execute("""CREATE TABLE IF NOT EXISTS saldo (
             user_id INTEGER PRIMARY KEY, saldo REAL DEFAULT 0)""")
+        # Tabel riwayat transaksi
         c.execute("""CREATE TABLE IF NOT EXISTS riwayat_transaksi (
             id TEXT PRIMARY KEY, user_id INTEGER, produk TEXT, tujuan TEXT, harga REAL, waktu TEXT, status_text TEXT, keterangan TEXT)""")
+        # Tabel topup pending (bukti, status, nominal, dsb)
         c.execute("""
             CREATE TABLE IF NOT EXISTS topup_pending (
                 id TEXT PRIMARY KEY,
@@ -42,7 +48,7 @@ def init_db():
         conn.commit()
         conn.close()
 
-# ---- PRODUK ----
+# --- PRODUK CRUD ---
 def get_all_produk(show_nonaktif=False):
     with db_lock:
         conn = get_conn()
@@ -96,7 +102,7 @@ def delete_produk(kode):
         conn.commit()
         conn.close()
 
-# ---- USER & SALDO ----
+# --- USER & SALDO ---
 def tambah_user(user_id, username, nama):
     with db_lock:
         conn = get_conn()
@@ -150,7 +156,7 @@ def kurang_saldo(user_id, amount):
         conn.commit()
         conn.close()
 
-# ---- TOPUP ----
+# --- TOPUP (pending, approve/reject, bukti, dsb) ---
 def insert_topup_pending(id, user_id, username, nama, nominal, waktu, status):
     with db_lock:
         conn = get_conn()
