@@ -420,5 +420,26 @@ def admin_topup_action(update: Update, context: CallbackContext):
     dp.add_handler(topup_conv)
     dp.add_handler(admin_conv)
 # ... [handler lain tetap]
+    # Tambahkan handler di bawah pada bagian main.py (daftar handler)
+def cekstatus(update: Update, context: CallbackContext):
+    if not context.args:
+        update.message.reply_text("Format: /cekstatus <reffid>")
+        return
+    reffid = context.args[0]
+    from provider import get_history
+    try:
+        data = get_history(reffid)
+        status = data.get("data", {}).get("status", "-")
+        ket = data.get("data", {}).get("message", "-")
+        update.message.reply_text(
+            f"Status transaksi:\nRefID: <code>{reffid}</code>\nStatus: {status}\nKeterangan: {ket}",
+            parse_mode=ParseMode.HTML
+        )
+    except Exception as e:
+        update.message.reply_text(f"Gagal cek status: {e}")
+
+# Tambahkan ke dispatcher:
+dp.add_handler(CommandHandler('cekstatus', cekstatus))
+
 if __name__ == "__main__":
     main()
