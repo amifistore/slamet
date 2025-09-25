@@ -1,6 +1,12 @@
+from dotenv import load_dotenv
 import os
+
+load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), ".env"))
+TOKEN = os.getenv("TELEGRAM_TOKEN")
+
 from telegram.ext import Updater, CommandHandler, CallbackQueryHandler, MessageHandler, Filters
 from db import init_db, get_saldo
+# ...lanjutkan seperti kode kamu...
 from user import start, handle_text, get_menu, cek_stok_menu
 from admin import (
     admin_panel, admin_add_produk, admin_list_produk, admin_edit_produk,
