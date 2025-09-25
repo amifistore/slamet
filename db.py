@@ -1,6 +1,5 @@
 import sqlite3
 import threading
-from datetime import datetime
 
 DBNAME = "botdata.db"
 db_lock = threading.Lock()
@@ -30,7 +29,7 @@ def init_db():
         conn.commit()
         conn.close()
 
-# PRODUK
+# ---- PRODUK ----
 def get_all_produk(show_nonaktif=False):
     with db_lock:
         conn = get_conn()
@@ -84,7 +83,7 @@ def delete_produk(kode):
         conn.commit()
         conn.close()
 
-# USER & SALDO
+# ---- USER & SALDO ----
 def tambah_user(user_id, username, nama):
     with db_lock:
         conn = get_conn()
