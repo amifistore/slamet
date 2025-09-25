@@ -238,6 +238,187 @@ def main():
 
     updater.start_polling()
     updater.idle()
+    # ... [import dan bagian di atas tetap]
 
+from telegram import InputMediaPhoto
+
+# Tambahan state
+(TOPUP_AMOUNT, TOPUP_UPLOAD, ADMIN_TOPUP_PENDING, ADMIN_APPROVE_TOPUP) = range(8, 12)
+
+def topup_start(update: Update, context: CallbackContext):
+    query = update.callback_query
+    query.answer()
+    query.edit_message_text(
+        "💳 <b>TOP UP SALDO</b>\n\nMasukkan nominal top up (contoh: 50000):",
+        parse_mode=ParseMode.HTML,
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Kembali", callback_data="main_menu")]])
+    )
+    context.user_data['topup_method'] = 'qris'
+    return TOPUP_AMOUNT
+
+def topup_amount_step(update: Update, context: CallbackContext):
+    try:
+        nominal = int(update.message.text.replace(".", "").replace(",", ""))
+        if nominal < 10000:
+            raise ValueError
+    except ValueError:
+        update.message.reply_text("❌ Nominal tidak valid. Min. 10.000. Ulangi.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Kembali", callback_data="main_menu")]]))
+        return TOPUP_AMOUNT
+
+    user = update.effective_user
+    kode_unik = uuid.uuid4().hex[:3]
+    nominal_final = nominal + int(kode_unik)
+    topup_id = str(uuid.uuid4())
+
+    # ---- SIMULASI QRIS ----
+    # Kamu bisa ganti ini dengan API QRIS sesungguhnya
+    fake_qris_img = open("qris_sample.png", "rb") if os.path.exists("qris_sample.png") else None
+
+    db.insert_topup_pending(
+        topup_id, user.id, user.username or "", user.full_name,
+        nominal_final, datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "pending"
+    )
+
+    update.message.reply_photo(
+        photo=fake_qris_img if fake_qris_img else None,
+        caption=f"Transfer tepat sebesar <b>Rp {nominal_final:,.0f}</b> ke QRIS di atas.\nKirim bukti transfer dengan upload foto di sini.",
+        parse_mode=ParseMode.HTML
+    )
+    context.user_data['pending_topup_id'] = topup_id
+    return TOPUP_UPLOAD
+
+def topup_upload_step(update: Update, context: CallbackContext):
+    user = update.effective_user
+    topup_id = context.user_data.get('pending_topup_id')
+    if not topup_id:
+        update.message.reply_text("❌ Sesi top up tidak ditemukan.", reply_markup=get_menu(user.id))
+        return ConversationHandler.END
+
+    if not update.message.photo:
+        update.message.reply_text("❌ Kirim bukti berupa foto.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Kembali", callback_data="main_menu")]]))
+        return TOPUP_UPLOAD
+
+    file_id = update.message.photo[-1].file_id
+    db.update_topup_bukti(topup_id, file_id, "")
+
+    # Notifikasi admin
+    for admin_id in cfg["ADMIN_IDS"]:
+        try:
+            context.bot.send_message(
+                admin_id,
+                f"🔔 Bukti transfer baru dari {user.full_name} (@{user.username or 'N/A'}). Approve di menu admin."
+            )
+        except Exception as e:
+            logger.error(f"Gagal kirim notif admin: {e}")
+
+    update.message.reply_text("✅ Bukti transfer terkirim. Tunggu konfirmasi admin.", reply_markup=get_menu(user.id))
+    context.user_data.pop('pending_topup_id', None)
+    return ConversationHandler.END
+
+# -------- ADMIN ---------
+def admin_panel(update: Update, context: CallbackContext):
+    query = update.callback_query
+    query.edit_message_text(
+        "👑 <b>PANEL ADMIN</b>\n\nPilih menu:",
+        parse_mode=ParseMode.HTML,
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("✅ Approve Top Up", callback_data="admin_topup_pending")],
+            [InlineKeyboardButton("🔙 Kembali", callback_data="main_menu")]
+        ])
+    )
+    return ADMIN_PANEL
+
+def admin_topup_pending(update: Update, context: CallbackContext):
+    query = update.callback_query
+    items = db.get_topup_pending_all(10)
+    keyboard = []
+    if not items:
+        keyboard.append([InlineKeyboardButton("✅ Tidak ada permintaan", callback_data="main_menu")])
+    for r in items:
+        label = f"{r[3]} - Rp {r[4]:,.2f}"
+        keyboard.append([InlineKeyboardButton(label, callback_data=f"admin_topup_detail|{r[0]}")])
+    keyboard.append([InlineKeyboardButton("🔙 Kembali", callback_data="admin_panel")])
+    query.edit_message_text(
+        "📋 <b>PERMINTAAN TOP UP PENDING</b>",
+        parse_mode=ParseMode.HTML,
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+    return ADMIN_TOPUP_PENDING
+
+def admin_topup_detail(update: Update, context: CallbackContext):
+    query = update.callback_query
+    topup_id = query.data.split("|")[1]
+    r = db.get_topup_by_id(topup_id)
+    if not r:
+        query.answer("❌ Data tidak ditemukan.", show_alert=True)
+        return admin_topup_pending(update, context)
+    caption = (
+        f"<b>Detail Top Up</b>\n\n"
+        f"User: {r[3]} (@{r[2]})\n"
+        f"ID: <code>{r[1]}</code>\n"
+        f"Nominal: Rp {r[4]:,.2f}\n"
+        f"Waktu: {r[5]}"
+    )
+    actions = [
+        [InlineKeyboardButton("✅ Setujui", callback_data=f"admin_topup_action|approve|{topup_id}"),
+         InlineKeyboardButton("❌ Tolak", callback_data=f"admin_topup_action|reject|{topup_id}")],
+        [InlineKeyboardButton("🔙 Kembali", callback_data="admin_topup_pending")]
+    ]
+    if r[7]: # bukti_file_id
+        query.edit_message_media(
+            InputMediaPhoto(r[7], caption=caption, parse_mode=ParseMode.HTML),
+            reply_markup=InlineKeyboardMarkup(actions)
+        )
+    else:
+        query.edit_message_text(caption + "\n\n(Belum ada bukti transfer)", parse_mode=ParseMode.HTML, reply_markup=InlineKeyboardMarkup(actions))
+    return ADMIN_APPROVE_TOPUP
+
+def admin_topup_action(update: Update, context: CallbackContext):
+    query = update.callback_query
+    _, action, topup_id = query.data.split("|")
+    r = db.get_topup_by_id(topup_id)
+    if not r:
+        query.answer("❌ Data tidak ditemukan.", show_alert=True)
+        return admin_topup_pending(update, context)
+    user_id, nominal = r[1], r[4]
+    if action == "approve":
+        db.tambah_saldo(user_id, nominal)
+        db.update_topup_status(topup_id, "approved")
+        query.answer("✅ Top up disetujui.", show_alert=True)
+        context.bot.send_message(user_id, f"✅ Top up Rp {nominal:,.2f} telah disetujui.")
+    elif action == "reject":
+        db.update_topup_status(topup_id, "rejected")
+        query.answer("❌ Top up ditolak.", show_alert=True)
+        context.bot.send_message(user_id, f"❌ Top up Rp {nominal:,.2f} ditolak.")
+    return admin_topup_pending(update, context)
+
+# -------- Tambahkan pada ConversationHandler states di main() --------
+# ...
+    topup_conv = ConversationHandler(
+        entry_points=[CallbackQueryHandler(topup_start, pattern='^topup_start$')],
+        states={
+            TOPUP_AMOUNT: [MessageHandler(Filters.text & ~Filters.command, topup_amount_step)],
+            TOPUP_UPLOAD: [MessageHandler(Filters.photo, topup_upload_step)],
+        },
+        fallbacks=[
+            CallbackQueryHandler(main_menu_callback, pattern="^main_menu$"),
+            CommandHandler('start', start),
+        ]
+    )
+    admin_conv = ConversationHandler(
+        entry_points=[CallbackQueryHandler(admin_panel, pattern='^admin_panel$')],
+        states={
+            ADMIN_PANEL: [CallbackQueryHandler(admin_topup_pending, pattern='^admin_topup_pending$')],
+            ADMIN_TOPUP_PENDING: [CallbackQueryHandler(admin_topup_detail, pattern='^admin_topup_detail\\|')],
+            ADMIN_APPROVE_TOPUP: [CallbackQueryHandler(admin_topup_action, pattern='^admin_topup_action\\|')],
+        },
+        fallbacks=[
+            CallbackQueryHandler(main_menu_callback, pattern="^main_menu$"),
+            CommandHandler('start', start),
+        ]
+    )
+    dp.add_handler(topup_conv)
+    dp.add_handler(admin_conv)
+# ... [handler lain tetap]
 if __name__ == "__main__":
     main()
