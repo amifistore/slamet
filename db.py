@@ -12,97 +12,22 @@ def init_db():
     with db_lock:
         conn = get_conn()
         c = conn.cursor()
-        # Tabel produk (master katalog, dikontrol admin)
-        c.execute("""
-            CREATE TABLE IF NOT EXISTS produk (
-                kode TEXT PRIMARY KEY,
-                nama TEXT,
-                harga REAL,
-                deskripsi TEXT,
-                aktif INTEGER DEFAULT 1
-            )
-        """)
-        # Tabel user
         c.execute("""CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY, username TEXT, nama TEXT)""")
-        # Tabel saldo
         c.execute("""CREATE TABLE IF NOT EXISTS saldo (
             user_id INTEGER PRIMARY KEY, saldo REAL DEFAULT 0)""")
-        # Tabel riwayat transaksi
         c.execute("""CREATE TABLE IF NOT EXISTS riwayat_transaksi (
             id TEXT PRIMARY KEY, user_id INTEGER, produk TEXT, tujuan TEXT, harga REAL, waktu TEXT, status_text TEXT, keterangan TEXT)""")
-        # Tabel topup pending (bukti, status, nominal, dsb)
-        c.execute("""
-            CREATE TABLE IF NOT EXISTS topup_pending (
-                id TEXT PRIMARY KEY,
-                user_id INTEGER,
-                username TEXT,
-                nama TEXT,
-                nominal REAL,
-                waktu TEXT,
-                status TEXT,
-                bukti_file_id TEXT,
-                bukti_caption TEXT
-            )
-        """)
+        c.execute("""CREATE TABLE IF NOT EXISTS topup_pending (
+            id TEXT PRIMARY KEY, user_id INTEGER, username TEXT, nama TEXT, nominal REAL, waktu TEXT, status TEXT, bukti_file_id TEXT, bukti_caption TEXT)""")
+        c.execute("""CREATE TABLE IF NOT EXISTS produk_admin (
+            kode TEXT PRIMARY KEY, harga REAL, deskripsi TEXT)""")
+        c.execute("""CREATE TABLE IF NOT EXISTS kode_unik_topup (
+            kode TEXT PRIMARY KEY, user_id INTEGER, nominal REAL, digunakan INTEGER DEFAULT 0, dibuat_pada TEXT, digunakan_pada TEXT)""")
         conn.commit()
         conn.close()
 
-# --- PRODUK CRUD ---
-def get_all_produk(show_nonaktif=False):
-    with db_lock:
-        conn = get_conn()
-        c = conn.cursor()
-        if show_nonaktif:
-            c.execute("SELECT kode, nama, harga, deskripsi, aktif FROM produk ORDER BY nama ASC")
-        else:
-            c.execute("SELECT kode, nama, harga, deskripsi, aktif FROM produk WHERE aktif=1 ORDER BY nama ASC")
-        rows = c.fetchall()
-        conn.close()
-        return rows
-
-def get_produk_by_kode(kode):
-    with db_lock:
-        conn = get_conn()
-        c = conn.cursor()
-        c.execute("SELECT kode, nama, harga, deskripsi, aktif FROM produk WHERE kode=?", (kode,))
-        row = c.fetchone()
-        conn.close()
-        return row
-
-def add_produk(kode, nama, harga, deskripsi, aktif=1):
-    with db_lock:
-        conn = get_conn()
-        c = conn.cursor()
-        c.execute("INSERT OR REPLACE INTO produk (kode, nama, harga, deskripsi, aktif) VALUES (?, ?, ?, ?, ?)",
-                  (kode, nama, harga, deskripsi, aktif))
-        conn.commit()
-        conn.close()
-
-def update_produk(kode, nama=None, harga=None, deskripsi=None, aktif=None):
-    with db_lock:
-        conn = get_conn()
-        c = conn.cursor()
-        if nama is not None:
-            c.execute("UPDATE produk SET nama=? WHERE kode=?", (nama, kode))
-        if harga is not None:
-            c.execute("UPDATE produk SET harga=? WHERE kode=?", (harga, kode))
-        if deskripsi is not None:
-            c.execute("UPDATE produk SET deskripsi=? WHERE kode=?", (deskripsi, kode))
-        if aktif is not None:
-            c.execute("UPDATE produk SET aktif=? WHERE kode=?", (aktif, kode))
-        conn.commit()
-        conn.close()
-
-def delete_produk(kode):
-    with db_lock:
-        conn = get_conn()
-        c = conn.cursor()
-        c.execute("DELETE FROM produk WHERE kode=?", (kode,))
-        conn.commit()
-        conn.close()
-
-# --- USER & SALDO ---
+# USER
 def tambah_user(user_id, username, nama):
     with db_lock:
         conn = get_conn()
@@ -130,6 +55,7 @@ def get_all_users():
         conn.close()
         return users
 
+# SALDO
 def get_saldo(user_id):
     with db_lock:
         conn = get_conn()
@@ -156,7 +82,64 @@ def kurang_saldo(user_id, amount):
         conn.commit()
         conn.close()
 
-# --- TOPUP (pending, approve/reject, bukti, dsb) ---
+# TRANSAKSI
+def log_riwayat(id, user_id, produk, tujuan, harga, waktu, status_text, keterangan):
+    with db_lock:
+        conn = get_conn()
+        c = conn.cursor()
+        c.execute("""INSERT INTO riwayat_transaksi
+            (id, user_id, produk, tujuan, harga, waktu, status_text, keterangan)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (id, user_id, produk, tujuan, harga, waktu, status_text, keterangan))
+        conn.commit()
+        conn.close()
+
+def get_riwayat_user(user_id, limit=10):
+    with db_lock:
+        conn = get_conn()
+        c = conn.cursor()
+        c.execute("""SELECT * FROM riwayat_transaksi WHERE user_id=? ORDER BY waktu DESC LIMIT ?""", (user_id, limit))
+        rows = c.fetchall()
+        conn.close()
+        return rows
+
+def get_all_riwayat(limit=10):
+    with db_lock:
+        conn = get_conn()
+        c = conn.cursor()
+        c.execute("""SELECT * FROM riwayat_transaksi ORDER BY waktu DESC LIMIT ?""", (limit,))
+        rows = c.fetchall()
+        conn.close()
+        return rows
+
+def get_riwayat_by_refid(reffid):
+    with db_lock:
+        conn = get_conn()
+        c = conn.cursor()
+        c.execute("SELECT * FROM riwayat_transaksi WHERE id=?", (reffid,))
+        row = c.fetchone()
+        conn.close()
+        return row
+
+def update_riwayat_status(reffid, status_text, keterangan):
+    with db_lock:
+        conn = get_conn()
+        c = conn.cursor()
+        c.execute("UPDATE riwayat_transaksi SET status_text=?, keterangan=? WHERE id=?",
+                  (status_text, keterangan, reffid))
+        conn.commit()
+        conn.close()
+
+def get_riwayat_jml(user_id):
+    with db_lock:
+        conn = get_conn()
+        c = conn.cursor()
+        c.execute("SELECT COUNT(*) FROM riwayat_transaksi WHERE user_id=?", (user_id,))
+        row = c.fetchone()
+        conn.close()
+        return row[0] if row else 0
+
+# TOPUP PENDING
 def insert_topup_pending(id, user_id, username, nama, nominal, waktu, status):
     with db_lock:
         conn = get_conn()
@@ -211,3 +194,92 @@ def get_topup_by_id(id):
         row = c.fetchone()
         conn.close()
         return row
+
+# PRODUK ADMIN
+def get_produk_admin(kode):
+    with db_lock:
+        conn = get_conn()
+        c = conn.cursor()
+        c.execute("SELECT harga, deskripsi FROM produk_admin WHERE kode=?", (kode,))
+        row = c.fetchone()
+        conn.close()
+        if row:
+            return {"harga": row[0], "deskripsi": row[1]}
+        return None
+
+def set_produk_admin_harga(kode, harga):
+    with db_lock:
+        conn = get_conn()
+        c = conn.cursor()
+        c.execute("INSERT OR IGNORE INTO produk_admin (kode, harga, deskripsi) VALUES (?, ?, '')", (kode, harga))
+        c.execute("UPDATE produk_admin SET harga=? WHERE kode=?", (harga, kode))
+        conn.commit()
+        conn.close()
+
+def set_produk_admin_deskripsi(kode, deskripsi):
+    with db_lock:
+        conn = get_conn()
+        c = conn.cursor()
+        c.execute("INSERT OR IGNORE INTO produk_admin (kode, harga, deskripsi) VALUES (?, 0, ?)", (kode, deskripsi))
+        c.execute("UPDATE produk_admin SET deskripsi=? WHERE kode=?", (deskripsi, kode))
+        conn.commit()
+        conn.close()
+
+def get_all_produk_admin():
+    with db_lock:
+        conn = get_conn()
+        c = conn.cursor()
+        c.execute("SELECT kode, harga, deskripsi FROM produk_admin")
+        rows = c.fetchall()
+        conn.close()
+        produk_dict = {}
+        for row in rows:
+            produk_dict[row[0]] = {"harga": row[1], "deskripsi": row[2]}
+        return produk_dict
+
+# KODE UNIK TOPUP
+def simpan_kode_unik(kode, user_id, nominal):
+    with db_lock:
+        conn = get_conn()
+        c = conn.cursor()
+        c.execute("""INSERT INTO kode_unik_topup 
+            (kode, user_id, nominal, digunakan, dibuat_pada) 
+            VALUES (?, ?, ?, 0, ?)""",
+            (kode, user_id, nominal, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+        conn.commit()
+        conn.close()
+
+def get_kode_unik(kode):
+    with db_lock:
+        conn = get_conn()
+        c = conn.cursor()
+        c.execute("SELECT * FROM kode_unik_topup WHERE kode=?", (kode,))
+        row = c.fetchone()
+        conn.close()
+        if row:
+            return {
+                "kode": row[0], "user_id": row[1], "nominal": row[2],
+                "digunakan": row[3], "dibuat_pada": row[4], "digunakan_pada": row[5]
+            }
+        return None
+
+def gunakan_kode_unik(kode):
+    with db_lock:
+        conn = get_conn()
+        c = conn.cursor()
+        c.execute("UPDATE kode_unik_topup SET digunakan=1, digunakan_pada=? WHERE kode=?",
+                  (datetime.now().strftime("%Y-%m-%d %H:%M:%S"), kode))
+        conn.commit()
+        conn.close()
+
+def get_kode_unik_user(user_id, limit=5):
+    with db_lock:
+        conn = get_conn()
+        c = conn.cursor()
+        c.execute("SELECT * FROM kode_unik_topup WHERE user_id=? ORDER BY dibuat_pada DESC LIMIT ?", (user_id, limit))
+        rows = c.fetchall()
+        conn.close()
+        return [{
+            "kode": r[0], "user_id": r[1], "nominal": r[2], "digunakan": r[3],
+            "dibuat_pada": r[4], "digunakan_pada": r[5]
+        } for r in rows]
