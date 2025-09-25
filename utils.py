@@ -11,7 +11,6 @@ class RateLimiter:
         now = int(time.time())
         with self.lock:
             data = self.users.get(user_id, [])
-            # keep only last 60 seconds
             data = [t for t in data if now - t < 60]
             if len(data) >= self.limit:
                 return False
