@@ -260,29 +260,41 @@ def get_kode_unik_user(user_id, limit=5):
 
 # ========== PROVIDER ==========
 def get_products():
-    url = f"{PROVIDER_BASE_URL}list_product?api_key={PROVIDER_API_KEY}"
-    r = requests.get(url, timeout=15)
-    r.raise_for_status()
-    data = r.json()
-    return data.get('data', [])
+    try:
+        url = f"{PROVIDER_BASE_URL}list_product?api_key={PROVIDER_API_KEY}"
+        r = requests.get(url, timeout=15)
+        r.raise_for_status()
+        data = r.json()
+        return data.get('data', [])
+    except Exception as e:
+        logger.error(f"[PROVIDER][get_products] Error: {e}")
+        return []
 
 def create_transaction(produk, tujuan, reff_id):
-    url = f"{PROVIDER_BASE_URL}trx"
-    params = {
-        "produk": produk,
-        "tujuan": tujuan,
-        "reff_id": reff_id,
-        "api_key": PROVIDER_API_KEY
-    }
-    r = requests.get(url, params=params, timeout=20)
-    r.raise_for_status()
-    return r.json()
+    try:
+        url = f"{PROVIDER_BASE_URL}trx"
+        params = {
+            "produk": produk,
+            "tujuan": tujuan,
+            "reff_id": reff_id,
+            "api_key": PROVIDER_API_KEY
+        }
+        r = requests.get(url, params=params, timeout=20)
+        r.raise_for_status()
+        return r.json()
+    except Exception as e:
+        logger.error(f"[PROVIDER][create_transaction] Error: {e}")
+        return {}
 
 def get_history(refid):
-    url = f"{PROVIDER_BASE_URL}history?api_key={PROVIDER_API_KEY}&refid={refid}"
-    r = requests.get(url, timeout=10)
-    r.raise_for_status()
-    return r.json()
+    try:
+        url = f"{PROVIDER_BASE_URL}history?api_key={PROVIDER_API_KEY}&refid={refid}"
+        r = requests.get(url, timeout=10)
+        r.raise_for_status()
+        return r.json()
+    except Exception as e:
+        logger.error(f"[PROVIDER][get_history] Error: {e}")
+        return {}
 
 # ========== UTILS ==========
 import time
@@ -445,10 +457,16 @@ def menu_router(update, context):
     elif data == "cek_stok":
         produk_list = get_products()
         msg = "📦 <b>Info Stok Produk</b>\n\n"
-        for produk in produk_list:
-            status = produk.get('status', 'Tersedia')
-            emoji = "✅" if status == 'Tersedia' else "❌"
-            msg += f"{emoji} [{produk['kode']}] {produk['nama']} ({status})\n"
+        if not produk_list:
+            msg += "Tidak ada produk ditemukan."
+        else:
+            for produk in produk_list:
+                kode = produk.get('kode') or produk.get('kode_produk') or produk.get('sku') or "-"
+                nama = produk.get('nama') or produk.get('product_name') or produk.get('name') or "-"
+                harga = produk.get('harga') or produk.get('price') or 0
+                status = produk.get('status', 'Tersedia')
+                emoji = "✅" if status == 'Tersedia' else "❌"
+                msg += f"{emoji} [{kode}] {nama} - Rp {float(harga):,.0f} ({status})\n"
         query.edit_message_text(msg, parse_mode=ParseMode.HTML, reply_markup=get_menu(user.id))
     elif data == "my_kode_unik":
         items = get_kode_unik_user(user.id, 5)
@@ -539,8 +557,6 @@ def handle_text(update: Update, context: CallbackContext):
 def order_start(update: Update, context: CallbackContext):
     query = update.callback_query
     query.answer()
-    query.edit_message_text("🔄 Memuat daftar produk, mohon tunggu...")
-
     produk_list = get_products()
     if not produk_list:
         query.edit_message_text("❌ Produk kosong/gagal load. Coba lagi nanti.", reply_markup=get_menu(query.from_user.id))
@@ -548,8 +564,13 @@ def order_start(update: Update, context: CallbackContext):
 
     keyboard = []
     for produk in produk_list:
-        label = f"[{produk['kode']}] {produk['nama']} - Rp {float(produk['harga']):,.0f}"
-        keyboard.append([InlineKeyboardButton(label, callback_data=f"order_detail|{produk['kode']}")])
+        kode = produk.get('kode') or produk.get('kode_produk') or produk.get('sku') or "-"
+        nama = produk.get('nama') or produk.get('product_name') or produk.get('name') or "-"
+        harga = produk.get('harga') or produk.get('price') or 0
+        if not kode or not nama:
+            continue
+        label = f"[{kode}] {nama} - Rp {float(harga):,.0f}"
+        keyboard.append([InlineKeyboardButton(label, callback_data=f"order_detail|{kode}")])
     keyboard.append([InlineKeyboardButton("🔙 Kembali", callback_data="main_menu")])
     query.edit_message_text(
         "🛒 <b>PILIH PRODUK</b>\n\nKlik produk yang ingin dibeli:",
