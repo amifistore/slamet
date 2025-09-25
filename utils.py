@@ -1,21 +1,40 @@
-import threading
-import time
+import os
+import json
+from config import SALDO_FILE, RIWAYAT_FILE, HARGA_PRODUK_FILE, TOPUP_FILE
 
-class RateLimiter:
-    def __init__(self, limit_per_minute=10):
-        self.limit = limit_per_minute
-        self.users = {}
-        self.lock = threading.Lock()
+def load_json(filename, fallback=None):
+    if os.path.exists(filename):
+        try:
+            with open(filename) as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return fallback if fallback is not None else {}
 
-    def check(self, user_id):
-        now = int(time.time())
-        with self.lock:
-            data = self.users.get(user_id, [])
-            data = [t for t in data if now - t < 60]
-            if len(data) >= self.limit:
-                return False
-            data.append(now)
-            self.users[user_id] = data
-            return True
+def save_json(filename, data):
+    with open(filename, "w") as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
 
-rate_limiter = RateLimiter()
+def get_saldo():
+    return load_json(SALDO_FILE, 500000)
+
+def set_saldo(amount):
+    save_json(SALDO_FILE, amount)
+
+def load_riwayat():
+    return load_json(RIWAYAT_FILE, {})
+
+def save_riwayat(riwayat):
+    save_json(RIWAYAT_FILE, riwayat)
+
+def load_harga_produk():
+    return load_json(HARGA_PRODUK_FILE, {})
+
+def save_harga_produk(harga_produk):
+    save_json(HARGA_PRODUK_FILE, harga_produk)
+
+def load_topup():
+    return load_json(TOPUP_FILE, {})
+
+def save_topup(topup):
+    save_json(TOPUP_FILE, topup)
