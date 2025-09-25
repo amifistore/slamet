@@ -1,100 +1,139 @@
-import uuid
-from datetime import datetime
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, ParseMode
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.orm import Session
+from typing import List, Optional
+from pydantic import BaseModel
+from fastapi.security import OAuth2PasswordBearer
+import jwt
+from passlib.context import CryptContext
 
-from db import tambah_user, get_saldo, get_all_produk, insert_topup_pending, get_topup_pending_by_user, update_topup_bukti
+from db import get_db, User, Transaction  # sesuaikan import sesuai struktur Anda
 
-def get_menu(uid):
-    menu = [
-        [InlineKeyboardButton("🛒 Beli Produk", callback_data='order_start')],
-        [InlineKeyboardButton("💳 Top Up Saldo", callback_data='topup_start')],
-        [InlineKeyboardButton("🧾 Riwayat Top Up", callback_data='topup_riwayat')],
-        [InlineKeyboardButton("📋 Riwayat", callback_data='riwayat')],
-        [InlineKeyboardButton("📦 Info Stok", callback_data='cek_stok')],
-        [InlineKeyboardButton("🏠 Menu Utama", callback_data='main_menu')]
-    ]
-    return InlineKeyboardMarkup(menu)
+SECRET_KEY = "YOUR_SECRET_KEY"
+ALGORITHM = "HS256"
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-def start(update, context):
-    user = update.effective_user
-    tambah_user(user.id, user.username or "", user.full_name)
-    saldo = get_saldo(user.id)
-    update.message.reply_text(
-        f"👋 <b>Hi, {user.full_name}!</b>\n💰 Saldo: <b>Rp {saldo:,.0f}</b>\nSilakan pilih menu di bawah.",
-        parse_mode=ParseMode.HTML,
-        reply_markup=get_menu(user.id)
-    )
+router = APIRouter(
+    prefix="/user",
+    tags=["user"]
+)
 
-def handle_text(update, context):
-    update.message.reply_text(
-        "Gunakan tombol menu di bawah ini.",
-        reply_markup=get_menu(update.effective_user.id)
-    )
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
-def cek_stok_menu(update, context):
-    query = update.callback_query
-    rows = get_all_produk(show_nonaktif=False)
-    msg = "📦 <b>Info Stok Produk (Aktif)</b>\n\n"
-    if not rows:
-        msg += "Tidak ada produk aktif."
-    else:
-        for kode, nama, harga, deskripsi, aktif in rows:
-            msg += f"🟢 <b>{nama}</b>\nKode: <code>{kode}</code>\nHarga: <b>Rp {float(harga):,.0f}</b>\nDesk: {deskripsi or '-'}\n\n"
+# ========== SCHEMAS ==========
+class UserOut(BaseModel):
+    id: int
+    username: str
+    saldo: int
+    email: Optional[str]
+
+    class Config:
+        orm_mode = True
+
+class TopUpRequest(BaseModel):
+    amount: int
+
+class TransactionOut(BaseModel):
+    id: int
+    user_id: int
+    type: str
+    amount: int
+    timestamp: str
+
+    class Config:
+        orm_mode = True
+
+class UpdateProfileRequest(BaseModel):
+    username: Optional[str] = None
+    email: Optional[str] = None
+
+class ChangePasswordRequest(BaseModel):
+    old_password: str
+    new_password: str
+
+# ========== HELPER FUNCTIONS ==========
+
+def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
     try:
-        query.edit_message_text(msg, parse_mode=ParseMode.HTML, reply_markup=get_menu(query.from_user.id))
-    except Exception as e:
-        if "Message is not modified" in str(e):
-            pass
-        else:
-            raise e
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id: int = payload.get("sub")
+        if user_id is None:
+            raise HTTPException(status_code=401, detail="Invalid token")
+        user = db.query(User).filter(User.id == user_id).first()
+        if user is None:
+            raise HTTPException(status_code=404, detail="User not found")
+        return user
+    except jwt.PyJWTError:
+        raise HTTPException(status_code=401, detail="Invalid token")
 
-def topup_start(update, context):
-    query = update.callback_query
-    query.answer()
-    qris_admin = "00020101021126610014COM.GO-JEK.WWW01189360091434506469550210G4506469550303UMI51440014ID.CO.QRIS"
-    query.edit_message_text(
-        f"💳 <b>TOP UP SALDO</b>\n\n"
-        f"Silakan transfer ke QRIS berikut (atau admin):\n"
-        f"<code>{qris_admin}</code>\n\n"
-        f"Upload bukti transfer di sini.\n"
-        f"Tulis nominal pada caption bukti (contoh: 100000)",
-        parse_mode=ParseMode.HTML,
-        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Kembali", callback_data="main_menu")]])
-    )
+def is_user_in_group(user: User) -> bool:
+    # TODO: Ganti dengan cek API Telegram/WhatsApp yang sebenarnya
+    # Misal: cek user.telegram_id pada group tertentu
+    # Untuk contoh, di sini selalu True (anggap user sudah join group)
+    return True
 
-def handle_photo(update, context):
-    user = update.effective_user
-    photo = update.message.photo[-1]
-    caption = update.message.caption or ""
-    nominal = None
-    # Cari nominal dari caption, contoh: "nominal 100000"
-    for word in caption.split():
-        if word.isdigit():
-            nominal = float(word)
-            break
+def verify_password(plain_password, hashed_password):
+    return pwd_context.verify(plain_password, hashed_password)
 
-    if not nominal:
-        update.message.reply_text("Tulis nominal top up di caption, misal: 100000")
-        return
+def get_password_hash(password):
+    return pwd_context.hash(password)
 
-    topup_id = str(uuid.uuid4())
-    waktu = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    insert_topup_pending(topup_id, user.id, user.username or "", user.full_name, nominal, waktu, "pending")
-    update_topup_bukti(topup_id, photo.file_id, caption)
-    update.message.reply_text("✅ Bukti top up diterima, tunggu admin verifikasi.")
+# ========== DEPENDENCY: GROUP VALIDATION ==========
 
-def riwayat_topup_menu(update, context):
-    query = update.callback_query
-    items = get_topup_pending_by_user(query.from_user.id, 10)
-    msg = "🧾 <b>Riwayat Top Up</b>\n\n"
-    if not items:
-        msg += "Belum ada riwayat top up."
-    else:
-        for r in items:
-            emoji = "✅" if r[6] == "approved" else ("❌" if r[6] == "rejected" else "⏳")
-            msg += (
-                f"{emoji} <b>{r[5]}</b>\n"
-                f"Nominal: Rp {r[4]:,.2f}\n"
-                f"Status: <b>{r[6]}</b>\n\n"
-            )
-    query.edit_message_text(msg, parse_mode=ParseMode.HTML, reply_markup=get_menu(query.from_user.id))
+def group_required(current_user: User = Depends(get_current_user)):
+    if not is_user_in_group(current_user):
+        raise HTTPException(
+            status_code=403,
+            detail="Kamu harus join channel/group terlebih dahulu untuk memakai bot ini!"
+        )
+    return current_user
+
+# ========== ENDPOINTS ==========
+
+@router.get("/me", response_model=UserOut)
+def get_profile(current_user: User = Depends(group_required)):
+    return current_user
+
+@router.post("/topup", response_model=UserOut)
+def topup(request: TopUpRequest, db: Session = Depends(get_db), current_user: User = Depends(group_required)):
+    if request.amount <= 0:
+        raise HTTPException(status_code=400, detail="Nominal harus lebih dari 0")
+    current_user.saldo += request.amount
+    db.add(current_user)
+    trx = Transaction(user_id=current_user.id, type="topup", amount=request.amount)
+    db.add(trx)
+    db.commit()
+    db.refresh(current_user)
+    return current_user
+
+@router.get("/riwayat", response_model=List[TransactionOut])
+def riwayat(db: Session = Depends(get_db), current_user: User = Depends(group_required)):
+    transaksi = db.query(Transaction).filter(Transaction.user_id == current_user.id).order_by(Transaction.timestamp.desc()).all()
+    return transaksi
+
+@router.put("/update_profile", response_model=UserOut)
+def update_profile(
+    request: UpdateProfileRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(group_required)
+):
+    if request.username:
+        current_user.username = request.username
+    if request.email:
+        current_user.email = request.email
+    db.add(current_user)
+    db.commit()
+    db.refresh(current_user)
+    return current_user
+
+@router.put("/change_password")
+def change_password(
+    request: ChangePasswordRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(group_required)
+):
+    if not verify_password(request.old_password, current_user.password):
+        raise HTTPException(status_code=400, detail="Password lama salah!")
+    current_user.password = get_password_hash(request.new_password)
+    db.add(current_user)
+    db.commit()
+    return {"msg": "Password berhasil diubah"}
