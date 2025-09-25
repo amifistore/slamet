@@ -6,14 +6,13 @@ TOKEN = os.getenv("TELEGRAM_TOKEN")
 
 from telegram.ext import Updater, CommandHandler, CallbackQueryHandler, MessageHandler, Filters
 from db import init_db, get_saldo
-# ...lanjutkan seperti kode kamu...
 from user import start, handle_text, get_menu, cek_stok_menu
 from admin import (
     admin_panel, admin_add_produk, admin_list_produk, admin_edit_produk,
     admin_edit_nama, admin_edit_harga, admin_edit_desk, admin_toggle, admin_del,
-    cmd_produkbaru, cmd_editnama, cmd_editharga, cmd_editdesk
+    cmd_produkbaru, cmd_editnama, cmd_editharga, cmd_editdesk,
+    admin_cekuser, lihat_saldo
 )
-from utils import rate_limiter
 
 ADMIN_IDS = [int(i) for i in os.getenv("ADMIN_IDS", "").split(",") if i]
 
@@ -32,7 +31,6 @@ def menu_router(update, context):
         )
     elif data == "cek_stok":
         return cek_stok_menu(update, context)
-    # ========== ADMIN ==========
     elif data == "admin_panel" and is_admin:
         return admin_panel(update, context)
     elif data == "admin_add_produk" and is_admin:
@@ -51,10 +49,13 @@ def menu_router(update, context):
         return admin_toggle(update, context)
     elif data.startswith("admin_del_") and is_admin:
         return admin_del(update, context)
+    elif data == "admin_cekuser" and is_admin:
+        return admin_cekuser(update, context)
+    elif data == "lihat_saldo" and is_admin:
+        return lihat_saldo(update, context)
 
 def main():
     init_db()
-    TOKEN = os.getenv("TELEGRAM_TOKEN")
     updater = Updater(TOKEN, use_context=True)
     dp = updater.dispatcher
 
