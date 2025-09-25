@@ -1,0 +1,14 @@
+[Unit]
+Description=KHFY Telegram Bot
+After=network.target
+
+[Service]
+Type=simple
+User=botuser
+WorkingDirectory=/path/to/your/bot
+ExecStart=/usr/bin/python3 /path/to/your/bot/main.py
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
