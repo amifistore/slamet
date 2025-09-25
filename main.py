@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime
 from flask import Flask, request, jsonify
 from telegram import (
-    Update, InlineKeyboardButton, InlineKeyboardMarkup, ParseMode, InputMediaPhoto
+    Update, InlineKeyboardButton, InlineKeyboardMarkup, ParseMode
 )
 from telegram.ext import (
     Updater, CommandHandler, CallbackQueryHandler, MessageHandler, Filters, ConversationHandler, CallbackContext
@@ -407,14 +407,109 @@ def get_menu(uid):
         menu.append([InlineKeyboardButton("👑 Panel Admin", callback_data='admin_panel')])
     return InlineKeyboardMarkup(menu)
 
+def start(update, context):
+    user = update.effective_user
+    tambah_user(user.id, user.username or "", user.full_name)
+    saldo = get_saldo(user.id)
+    update.message.reply_text(
+        f"Selamat datang, <b>{user.full_name}</b>!\nSaldo: <b>Rp {saldo:,.0f}</b>\nSilakan pilih menu:",
+        parse_mode=ParseMode.HTML,
+        reply_markup=get_menu(user.id)
+    )
+
+def handle_text(update, context):
+    update.message.reply_text(
+        "Gunakan tombol menu di bawah ini.",
+        reply_markup=get_menu(update.effective_user.id)
+    )
+
 def menu_router(update, context):
     query = update.callback_query
     data = query.data
     user = query.from_user
     is_admin = user.id in ADMIN_IDS
 
-    # ... semua menu user dan admin ...
-    if data == "admin_panel" and is_admin:
+    if data == "main_menu":
+        saldo = get_saldo(user.id)
+        query.edit_message_text(
+            f"🏠 <b>MENU UTAMA</b>\nSaldo kamu: <b>Rp {saldo:,.0f}</b>",
+            parse_mode=ParseMode.HTML,
+            reply_markup=get_menu(user.id)
+        )
+    elif data == "order_start":
+        return order_start(update, context)
+    elif data == "topup_start":
+        return topup_start(update, context)
+    elif data == "riwayat":
+        items = get_riwayat_user(user.id, 10)
+        msg = "📋 <b>Riwayat Transaksi</b>\n\n"
+        if not items:
+            msg += "Belum ada transaksi."
+        else:
+            for r in items:
+                status = r[6].upper()
+                emoji = "✅" if "SUKSES" in status else ("❌" if "GAGAL" in status else "⏳")
+                msg += (
+                    f"{emoji} <b>{r[5]}</b>\n"
+                    f"Produk: {r[2]} ke {r[3]}\n"
+                    f"Harga: Rp {r[4]:,.2f}\n"
+                    f"Status: <b>{status}</b> - <i>{r[7]}</i>\n\n"
+                )
+        query.edit_message_text(msg, parse_mode=ParseMode.HTML, reply_markup=get_menu(user.id))
+    elif data == "topup_riwayat":
+        items = get_topup_pending_by_user(user.id, 10)
+        msg = "🧾 <b>Riwayat Top Up</b>\n\n"
+        if not items:
+            msg += "Belum ada riwayat top up."
+        else:
+            for r in items:
+                emoji = "✅" if r[6] == "approved" else ("❌" if r[6] == "rejected" else "⏳")
+                msg += (
+                    f"{emoji} <b>{r[5]}</b>\n"
+                    f"Nominal: Rp {r[4]:,.2f}\n"
+                    f"Status: <b>{r[6]}</b>\n\n"
+                )
+        query.edit_message_text(msg, parse_mode=ParseMode.HTML, reply_markup=get_menu(user.id))
+    elif data == "cek_stok":
+        produk_list = get_products()
+        msg = "📦 <b>Info Stok Produk</b>\n\n"
+        if not produk_list:
+            msg += "Tidak ada produk ditemukan."
+        else:
+            for produk in produk_list:
+                kode = produk.get('kode') or produk.get('kode_produk') or produk.get('sku') or "-"
+                nama = produk.get('nama') or produk.get('product_name') or produk.get('name') or "-"
+                harga = produk.get('harga') or produk.get('price') or 0
+                status = produk.get('status', 'Tersedia')
+                emoji = "✅" if status == 'Tersedia' else "❌"
+                msg += f"{emoji} [{kode}] {nama} - Rp {float(harga):,.0f} ({status})\n"
+        query.edit_message_text(msg, parse_mode=ParseMode.HTML, reply_markup=get_menu(user.id))
+    elif data == "my_kode_unik":
+        items = get_kode_unik_user(user.id, 5)
+        msg = "🔑 <b>Kode Unik Top Up</b>\n\n"
+        if not items:
+            msg += "Belum ada kode unik."
+        else:
+            for kode in items:
+                used = "✅" if kode["digunakan"] else "⏳"
+                msg += (
+                    f"{used} Kode: <code>{kode['kode']}</code>\n"
+                    f"Nominal: Rp {kode['nominal']:,.0f}\n"
+                    f"Dibuat: {kode['dibuat_pada']}\n"
+                    f"Status: {'Digunakan' if kode['digunakan'] else 'Belum'}\n\n"
+                )
+        query.edit_message_text(msg, parse_mode=ParseMode.HTML, reply_markup=get_menu(user.id))
+    elif data == "bantuan":
+        msg = (
+            "❓ <b>Bantuan</b>\n"
+            "• Untuk order, klik 'Beli Produk'\n"
+            "• Top up saldo, klik 'Top Up Saldo'\n"
+            "• Riwayat transaksi/top up, klik menu terkait\n"
+            "Jika ada kendala, hubungi admin."
+        )
+        query.edit_message_text(msg, parse_mode=ParseMode.HTML, reply_markup=get_menu(user.id))
+    # ========== ADMIN PANEL ==========
+    elif data == "admin_panel" and is_admin:
         return admin_panel(update, context)
     elif data == "admin_edit_produk" and is_admin:
         produk_list = get_products()
@@ -441,7 +536,9 @@ def menu_router(update, context):
                 [InlineKeyboardButton("🔙 Kembali", callback_data="admin_edit_produk")]
             ])
         )
-    # ...menu router lain...
+    # ...tambahkan router admin lainnya seperti broadcast dsb...
+    else:
+        query.answer("Menu tidak tersedia.", show_alert=True)
 
 def admin_panel(update, context):
     query = update.callback_query
@@ -457,6 +554,40 @@ def admin_panel(update, context):
         ])
     )
     return ConversationHandler.END
+
+def order_start(update, context):
+    query = update.callback_query
+    query.answer()
+    produk_list = get_products()
+    if not produk_list:
+        query.edit_message_text("❌ Produk kosong/gagal load. Coba lagi nanti.", reply_markup=get_menu(query.from_user.id))
+        return ConversationHandler.END
+
+    keyboard = []
+    for produk in produk_list:
+        kode = produk.get('kode') or produk.get('kode_produk') or produk.get('sku') or "-"
+        nama = produk.get('nama') or produk.get('product_name') or produk.get('name') or "-"
+        harga = produk.get('harga') or produk.get('price') or 0
+        if not kode or not nama:
+            continue
+        label = f"[{kode}] {nama} - Rp {float(harga):,.0f}"
+        keyboard.append([InlineKeyboardButton(label, callback_data=f"order_detail|{kode}")])
+    keyboard.append([InlineKeyboardButton("🔙 Kembali", callback_data="main_menu")])
+    query.edit_message_text(
+        "🛒 <b>PILIH PRODUK</b>\n\nKlik produk yang ingin dibeli:",
+        parse_mode=ParseMode.HTML,
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+    return ConversationHandler.END
+
+def topup_start(update, context):
+    query = update.callback_query
+    query.answer()
+    query.edit_message_text(
+        f"💳 <b>TOP UP SALDO</b>\n\nSilakan transfer ke QRIS berikut (atau admin):\n\n{QRIS_STATIS or '-'}\n\nUpload bukti transfer di sini.",
+        parse_mode=ParseMode.HTML,
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Kembali", callback_data="main_menu")]])
+    )
 
 def edit_harga(update: Update, context: CallbackContext):
     user = update.effective_user
@@ -475,7 +606,6 @@ def edit_harga(update: Update, context: CallbackContext):
         update.message.reply_text("Format harga salah.")
         return
     kode_produk = context.user_data["edit_kode_produk"]
-    # --- UPDATE VIA PROVIDER, ganti sesuai API provider kamu ---
     url = f"{PROVIDER_BASE_URL}update_produk"
     payload = {
         "api_key": PROVIDER_API_KEY,
