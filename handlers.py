@@ -199,10 +199,10 @@ def admin_edit_produk_step(update: Update, context: CallbackContext):
                 )
             except ValueError as e:
                 update.message.reply_text(
-                    f"❌ Format harga tidak valid: {str(e)}",
-                    parse_mode="HTML",
-                    reply_markup=get_menu(update.effective_user.id)
+                    f"❌ Format harga tidak valid: {str(e)}\nSilakan masukkan lagi:",
+                    parse_mode="HTML"
                 )
+                return ADMIN_EDIT  # Tetap di state yang sama untuk input ulang
         
         elif field == "deskripsi":
             old_deskripsi = p["deskripsi"]
@@ -233,8 +233,11 @@ def admin_edit_produk_step(update: Update, context: CallbackContext):
         )
     
     finally:
-        context.user_data.pop("edit_kode", None)
-        context.user_data.pop("edit_field", None)
+        # Clear user data hanya jika berhasil
+        if 'edit_kode' in context.user_data:
+            context.user_data.pop("edit_kode", None)
+        if 'edit_field' in context.user_data:
+            context.user_data.pop("edit_field", None)
     
     return ConversationHandler.END
 
@@ -448,6 +451,12 @@ def semua_riwayat(query, context):
         query.edit_message_text(f"❌ Error memuat riwayat: {str(e)}", parse_mode=ParseMode.HTML, reply_markup=get_menu(query.from_user.id))
 
 def handle_text(update: Update, context: CallbackContext):
+    # Hanya handle text yang bukan bagian dari conversation
+    if context.user_data:
+        # Jika ada user_data, berarti sedang dalam conversation
+        # Biarkan conversation handler yang menangani
+        return
+    
     text = update.message.text.strip()
     user = update.effective_user
     isadmin = is_admin(user.id)
@@ -491,12 +500,10 @@ def handle_text(update: Update, context: CallbackContext):
             update.message.reply_text(f"❌ Error: {str(e)}", reply_markup=get_menu(user.id))
     
     else:
-        # Only show this message if not in any conversation
-        if not context.user_data:
-            update.message.reply_text(
-                "❌ Perintah tidak dikenali. Gunakan menu di bawah.", 
-                reply_markup=get_menu(user.id)
-            )
+        update.message.reply_text(
+            "❌ Perintah tidak dikenali. Gunakan menu di bawah.", 
+            reply_markup=get_menu(user.id)
+        )
 
 # Create conversation handler
 def get_conversation_handler():
@@ -510,8 +517,8 @@ def get_conversation_handler():
             ADMIN_EDIT: [MessageHandler(Filters.text & ~Filters.command, admin_edit_produk_step)],
         },
         fallbacks=[
-            MessageHandler(Filters.command, cancel),
-            MessageHandler(Filters.text, handle_text)
+            MessageHandler(Filters.regex('^(/batal|batal|BATAL|cancel)$'), cancel),
+            MessageHandler(Filters.command, cancel)
         ],
         allow_reentry=True
     )
