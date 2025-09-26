@@ -1,40 +1,60 @@
 import requests
-from config import API_KEY, BASE_URL, BASE_URL_AKRAB
+
+API_KEY = "API_KEY_ANDA"  # Ganti dengan apikey kamu
+BASE_URL = "https://panel.khfy-store.com/api_v2"
+BASE_URL_V3 = "https://panel.khfy-store.com/api_v3"
 
 def list_product():
-    url = f"{BASE_URL}list_product?api_key={API_KEY}"
     try:
-        res = requests.get(url, timeout=15)
-        return res.json()
+        url = f"{BASE_URL}/list_product"
+        params = {"api_key": API_KEY}
+        resp = requests.get(url, params=params, timeout=15)
+        data = resp.json()
+        return data.get("data", []) if isinstance(data, dict) else []
     except Exception as e:
-        print("[provider/list_product]", e)
-        return None
+        print("Error list_product:", e)
+        return []
 
 def create_trx(produk, tujuan, reff_id=None):
-    from uuid import uuid4
-    reff_id = reff_id or str(uuid4())
-    url = f"{BASE_URL}trx?produk={produk}&tujuan={tujuan}&reff_id={reff_id}&api_key={API_KEY}"
     try:
-        res = requests.get(url, timeout=15)
-        return res.json()
+        import uuid
+        if not reff_id:
+            reff_id = str(uuid.uuid4())
+        url = f"{BASE_URL}/trx"
+        params = {
+            "produk": produk,
+            "tujuan": tujuan,
+            "reff_id": reff_id,
+            "api_key": API_KEY
+        }
+        resp = requests.get(url, params=params, timeout=15)
+        data = resp.json()
+        return data
     except Exception as e:
-        print("[provider/create_trx]", e)
-        return None
+        print("Error create_trx:", e)
+        return {"status": "error", "message": str(e)}
 
 def history(refid):
-    url = f"{BASE_URL}history?api_key={API_KEY}&refid={refid}"
     try:
-        res = requests.get(url, timeout=15)
-        return res.json()
+        url = f"{BASE_URL}/history"
+        params = {
+            "api_key": API_KEY,
+            "refid": refid
+        }
+        resp = requests.get(url, params=params, timeout=15)
+        data = resp.json()
+        return data
     except Exception as e:
-        print("[provider/history]", e)
-        return None
+        print("Error history:", e)
+        return {"status": "error", "message": str(e)}
 
 def cek_stock_akrab():
-    url = f"{BASE_URL_AKRAB}cek_stock_akrab"
     try:
-        res = requests.get(url, timeout=15)
-        return res.text
+        url = f"{BASE_URL_V3}/cek_stock_akrab"
+        params = {"api_key": API_KEY}
+        resp = requests.get(url, params=params, timeout=15)
+        # Return string JSON (untuk format_stock_akrab)
+        return resp.text
     except Exception as e:
-        print("[provider/cek_stock_akrab]", e)
-        return None
+        print("Error cek_stock_akrab:", e)
+        return ""
