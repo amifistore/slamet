@@ -1,125 +1,251 @@
 import json
 import os
+import logging
 from provider import cek_stock_akrab
 
+# Setup logger
+logger = logging.getLogger(__name__)
+
 LIST_PRODUK_TETAP = [
-    {"kode": "bpal1",    "nama": "Bonus Akrab L - 1 hari",   "harga": 5000,  "deskripsi": "Paket harian murah"},
-    {"kode": "bpal11",   "nama": "Bonus Akrab L - 11 hari",  "harga": 50000, "deskripsi": "Paket 11 hari hemat"},
-    {"kode": "bpal13",   "nama": "Bonus Akrab L - 13 hari",  "harga": 60000, "deskripsi": "Paket 13 hari"},
-    {"kode": "bpal15",   "nama": "Bonus Akrab L - 15 hari",  "harga": 70000, "deskripsi": "Paket 15 hari"},
-    {"kode": "bpal17",   "nama": "Bonus Akrab L - 17 hari",  "harga": 80000, "deskripsi": "Paket 17 hari"},
-    {"kode": "bpal19",   "nama": "Bonus Akrab L - 19 hari",  "harga": 90000, "deskripsi": "Paket 19 hari"},
-    {"kode": "bpal3",    "nama": "Bonus Akrab L - 3 hari",   "harga": 13000, "deskripsi": "Paket 3 hari"},
-    {"kode": "bpal5",    "nama": "Bonus Akrab L - 5 hari",   "harga": 20000, "deskripsi": "Paket 5 hari"},
-    {"kode": "bpal7",    "nama": "Bonus Akrab L - 7 hari",   "harga": 30000, "deskripsi": "Paket 7 hari"},
-    {"kode": "bpal9",    "nama": "Bonus Akrab L - 9 hari",   "harga": 40000, "deskripsi": "Paket 9 hari"},
-    {"kode": "bpaxxl1",  "nama": "Bonus Akrab XXL - 1 hari", "harga": 8000,  "deskripsi": "XXL 1 hari"},
-    {"kode": "bpaxxl11", "nama": "Bonus Akrab XXL - 11 hari","harga": 80000, "deskripsi": "XXL 11 hari"},
-    {"kode": "bpaxxl13", "nama": "Bonus Akrab XXL - 13 hari","harga": 90000, "deskripsi": "XXL 13 hari"},
-    {"kode": "bpaxxl15", "nama": "Bonus Akrab XXL - 15 hari","harga": 100000,"deskripsi": "XXL 15 hari"},
-    {"kode": "bpaxxl19", "nama": "Bonus Akrab XXL - 19 hari","harga": 120000,"deskripsi": "XXL 19 hari"},
-    {"kode": "bpaxxl3",  "nama": "Bonus Akrab XXL - 3 hari", "harga": 20000, "deskripsi": "XXL 3 hari"},
-    {"kode": "bpaxxl5",  "nama": "Bonus Akrab XXL - 5 hari", "harga": 30000, "deskripsi": "XXL 5 hari"},
-    {"kode": "bpaxxl7",  "nama": "Bonus Akrab XXL - 7 hari", "harga": 40000, "deskripsi": "XXL 7 hari"},
-    {"kode": "bpaxxl9",  "nama": "Bonus Akrab XXL - 9 hari", "harga": 50000, "deskripsi": "XXL 9 hari"},
-    {"kode": "XLA14",    "nama": "SuperMini",                "harga": 15000, "deskripsi": "SuperMini murah"},
-    {"kode": "XLA32",    "nama": "Mini",                     "harga": 30000, "deskripsi": "Mini paket"},
-    {"kode": "XLA39",    "nama": "Big",                      "harga": 39000, "deskripsi": "Big paket"},
-    {"kode": "XLA51",    "nama": "Jumbo V2",                 "harga": 51000, "deskripsi": "Jumbo paket"},
-    {"kode": "XLA65",    "nama": "JUMBO",                    "harga": 65000, "deskripsi": "Jumbo paket spesial"},
-    {"kode": "XLA89",    "nama": "MegaBig",                  "harga": 89000, "deskripsi": "MegaBig super paket"}
+    {"kode": "bpal1",    "nama": "Bonus Akrab L - 1 hari",   "harga": 5000,  "deskripsi": "Paket harian murah", "kuota": 0},
+    {"kode": "bpal11",   "nama": "Bonus Akrab L - 11 hari",  "harga": 50000, "deskripsi": "Paket 11 hari hemat", "kuota": 0},
+    {"kode": "bpal13",   "nama": "Bonus Akrab L - 13 hari",  "harga": 60000, "deskripsi": "Paket 13 hari", "kuota": 0},
+    {"kode": "bpal15",   "nama": "Bonus Akrab L - 15 hari",  "harga": 70000, "deskripsi": "Paket 15 hari", "kuota": 0},
+    {"kode": "bpal17",   "nama": "Bonus Akrab L - 17 hari",  "harga": 80000, "deskripsi": "Paket 17 hari", "kuota": 0},
+    {"kode": "bpal19",   "nama": "Bonus Akrab L - 19 hari",  "harga": 90000, "deskripsi": "Paket 19 hari", "kuota": 0},
+    {"kode": "bpal3",    "nama": "Bonus Akrab L - 3 hari",   "harga": 13000, "deskripsi": "Paket 3 hari", "kuota": 0},
+    {"kode": "bpal5",    "nama": "Bonus Akrab L - 5 hari",   "harga": 20000, "deskripsi": "Paket 5 hari", "kuota": 0},
+    {"kode": "bpal7",    "nama": "Bonus Akrab L - 7 hari",   "harga": 30000, "deskripsi": "Paket 7 hari", "kuota": 0},
+    {"kode": "bpal9",    "nama": "Bonus Akrab L - 9 hari",   "harga": 40000, "deskripsi": "Paket 9 hari", "kuota": 0},
+    {"kode": "bpaxxl1",  "nama": "Bonus Akrab XXL - 1 hari", "harga": 8000,  "deskripsi": "XXL 1 hari", "kuota": 0},
+    {"kode": "bpaxxl11", "nama": "Bonus Akrab XXL - 11 hari","harga": 80000, "deskripsi": "XXL 11 hari", "kuota": 0},
+    {"kode": "bpaxxl13", "nama": "Bonus Akrab XXL - 13 hari","harga": 90000, "deskripsi": "XXL 13 hari", "kuota": 0},
+    {"kode": "bpaxxl15", "nama": "Bonus Akrab XXL - 15 hari","harga": 100000,"deskripsi": "XXL 15 hari", "kuota": 0},
+    {"kode": "bpaxxl19", "nama": "Bonus Akrab XXL - 19 hari","harga": 120000,"deskripsi": "XXL 19 hari", "kuota": 0},
+    {"kode": "bpaxxl3",  "nama": "Bonus Akrab XXL - 3 hari", "harga": 20000, "deskripsi": "XXL 3 hari", "kuota": 0},
+    {"kode": "bpaxxl5",  "nama": "Bonus Akrab XXL - 5 hari", "harga": 30000, "deskripsi": "XXL 5 hari", "kuota": 0},
+    {"kode": "bpaxxl7",  "nama": "Bonus Akrab XXL - 7 hari", "harga": 40000, "deskripsi": "XXL 7 hari", "kuota": 0},
+    {"kode": "bpaxxl9",  "nama": "Bonus Akrab XXL - 9 hari", "harga": 50000, "deskripsi": "XXL 9 hari", "kuota": 0},
+    {"kode": "XLA14",    "nama": "SuperMini",                "harga": 15000, "deskripsi": "SuperMini murah", "kuota": 0},
+    {"kode": "XLA32",    "nama": "Mini",                     "harga": 30000, "deskripsi": "Mini paket", "kuota": 0},
+    {"kode": "XLA39",    "nama": "Big",                      "harga": 39000, "deskripsi": "Big paket", "kuota": 0},
+    {"kode": "XLA51",    "nama": "Jumbo V2",                 "harga": 51000, "deskripsi": "Jumbo paket", "kuota": 0},
+    {"kode": "XLA65",    "nama": "JUMBO",                    "harga": 65000, "deskripsi": "Jumbo paket spesial", "kuota": 0},
+    {"kode": "XLA89",    "nama": "MegaBig",                  "harga": 89000, "deskripsi": "MegaBig super paket", "kuota": 0}
 ]
 
 CUSTOM_FILE = "produk_custom.json"
 
 def load_custom_produk():
-    if os.path.exists(CUSTOM_FILE):
-        with open(CUSTOM_FILE, "r") as f:
-            return json.load(f)
-    return {}
+    """Load custom produk dari file JSON"""
+    try:
+        if os.path.exists(CUSTOM_FILE):
+            with open(CUSTOM_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        return {}
+    except Exception as e:
+        logger.error(f"Error loading custom produk: {e}")
+        return {}
 
 def save_custom_produk(data):
-    with open(CUSTOM_FILE, "w") as f:
-        json.dump(data, f, indent=2)
+    """Simpan custom produk ke file JSON"""
+    try:
+        with open(CUSTOM_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+        return True
+    except Exception as e:
+        logger.error(f"Error saving custom produk: {e}")
+        return False
 
 def get_all_custom_produk():
     """
     Ambil semua custom produk dari file produk_custom.json
     Return dict: {kode: {harga:..., deskripsi:...}, ...}
     """
-    data = load_custom_produk()
-    # Hapus field 'nama' jika ada
-    result = {}
-    for k, v in data.items():
-        v = dict(v)
-        v.pop("nama", None)
-        result[k.lower()] = v
-    return result
+    try:
+        data = load_custom_produk()
+        result = {}
+        for k, v in data.items():
+            if isinstance(v, dict):
+                # Copy semua field kecuali 'nama' karena sudah ada di LIST_PRODUK_TETAP
+                v_copy = v.copy()
+                v_copy.pop("nama", None)
+                result[k.lower()] = v_copy
+        return result
+    except Exception as e:
+        logger.error(f"Error getting custom produk: {e}")
+        return {}
+
+def parse_stock_from_provider():
+    """Parse stock dari provider dengan error handling"""
+    try:
+        stok_raw = cek_stock_akrab()
+        
+        # Handle berbagai format response
+        if isinstance(stok_raw, dict):
+            stok_data = stok_raw
+        elif isinstance(stok_raw, str):
+            if stok_raw.strip().lower().startswith("<html"):
+                logger.warning("Provider returned HTML instead of JSON")
+                return {}
+            stok_data = json.loads(stok_raw)
+        else:
+            logger.warning(f"Unexpected stock format: {type(stok_raw)}")
+            return {}
+            
+        # Extract stock data
+        if "data" in stok_data and isinstance(stok_data["data"], list):
+            slot_map = {}
+            for item in stok_data["data"]:
+                if isinstance(item, dict) and "type" in item:
+                    product_type = item["type"].lower()
+                    sisa_slot = item.get("sisa_slot", 0)
+                    # Convert to int jika mungkin
+                    try:
+                        sisa_slot = int(sisa_slot) if sisa_slot not in [None, ""] else 0
+                    except (ValueError, TypeError):
+                        sisa_slot = 0
+                    slot_map[product_type] = sisa_slot
+            return slot_map
+        return {}
+    except Exception as e:
+        logger.error(f"Error parsing stock from provider: {e}")
+        return {}
 
 def get_list_stok_fixed():
-    stok_raw = cek_stock_akrab()
+    """Dapatkan list produk dengan stock terupdate dari provider"""
     try:
-        stok_data = json.loads(stok_raw) if isinstance(stok_raw, str) else stok_raw
-        slot_map = {item["type"].lower(): item.get("sisa_slot", 0) for item in stok_data.get("data", [])}
-    except Exception:
-        slot_map = {}
-
-    custom = get_all_custom_produk()
-    output = []
-    for p in LIST_PRODUK_TETAP:
-        kode = p["kode"].lower()
-        produk = p.copy()
-        # Override harga/deskripsi custom dari file jika ada
-        if kode in custom:
-            if custom[kode].get("harga") is not None:
-                produk["harga"] = custom[kode]["harga"]
-            if custom[kode].get("deskripsi"):
-                produk["deskripsi"] = custom[kode]["deskripsi"]
-        produk["sisa_slot"] = slot_map.get(kode, 0)
-        produk["kuota"] = produk["sisa_slot"]
-        output.append(produk)
-    return output
+        # Dapatkan stock dari provider
+        slot_map = parse_stock_from_provider()
+        
+        # Dapatkan custom harga/deskripsi
+        custom_data = get_all_custom_produk()
+        
+        output = []
+        for produk in LIST_PRODUK_TETAP:
+            kode = produk["kode"].lower()
+            produk_copy = produk.copy()
+            
+            # Apply custom data jika ada
+            if kode in custom_data:
+                custom = custom_data[kode]
+                if custom.get("harga") is not None:
+                    try:
+                        produk_copy["harga"] = int(custom["harga"])
+                    except (ValueError, TypeError):
+                        logger.warning(f"Invalid harga for {kode}: {custom.get('harga')}")
+                
+                if custom.get("deskripsi"):
+                    produk_copy["deskripsi"] = custom["deskripsi"]
+            
+            # Update stock/kuota
+            produk_copy["sisa_slot"] = slot_map.get(kode, 0)
+            produk_copy["kuota"] = produk_copy["sisa_slot"]  # Sesuai dengan kode sebelumnya
+            
+            output.append(produk_copy)
+            
+        return output
+    except Exception as e:
+        logger.error(f"Error getting product list with stock: {e}")
+        # Fallback ke list produk tetap tanpa stock
+        return LIST_PRODUK_TETAP.copy()
 
 def get_produk_list():
+    """Interface function untuk compatibility dengan kode sebelumnya"""
     return get_list_stok_fixed()
 
-def format_list_stok_fixed():
-    items = get_list_stok_fixed()
-    msg = "<b>Kode      | Nama                | Harga   | Sisa Slot</b>\n<pre>"
-    for item in items:
-        kode = item['kode'].ljust(8)
-        nama = item['nama'].ljust(20)
-        harga = str(item['harga']).rjust(7)
-        slot = str(item['sisa_slot']).rjust(4)
-        msg += f"{kode} | {nama} | {harga} | {slot}\n"
-    msg += "</pre>"
-    return msg
-
 def get_produk_by_kode(kode):
-    kode = kode.lower()
-    custom = get_all_custom_produk()
-    stok_map = {p['kode'].lower(): p['sisa_slot'] for p in get_list_stok_fixed()}
-    for produk in LIST_PRODUK_TETAP:
-        if produk["kode"].lower() == kode:
-            data = produk.copy()
-            if kode in custom:
-                if custom[kode].get("harga") is not None:
-                    data["harga"] = custom[kode]["harga"]
-                if custom[kode].get("deskripsi"):
-                    data["deskripsi"] = custom[kode]["deskripsi"]
-            data["sisa_slot"] = stok_map.get(kode, 0)
-            data["kuota"] = data["sisa_slot"]
-            return data
-    return None
+    """Dapatkan produk berdasarkan kode"""
+    if not kode:
+        return None
+        
+    try:
+        kode = kode.lower()
+        all_products = get_list_stok_fixed()
+        
+        for produk in all_products:
+            if produk["kode"].lower() == kode:
+                return produk
+        return None
+    except Exception as e:
+        logger.error(f"Error getting product by kode {kode}: {e}")
+        return None
 
 def edit_produk(kode, harga=None, deskripsi=None):
-    kode = kode.lower()
-    data = load_custom_produk()
-    if kode not in data:
-        data[kode] = {}
-    if harga is not None:
-        data[kode]["harga"] = harga
-    if deskripsi is not None:
-        data[kode]["deskripsi"] = deskripsi
-    save_custom_produk(data)
-    return True
+    """Edit produk (harga/deskripsi)"""
+    if not kode:
+        return False
+        
+    try:
+        kode = kode.lower()
+        custom_data = load_custom_produk()
+        
+        # Pastikan kode ada dalam custom data atau buat entry baru
+        if kode not in custom_data:
+            custom_data[kode] = {}
+        
+        # Update harga jika provided
+        if harga is not None:
+            try:
+                custom_data[kode]["harga"] = int(harga)
+            except (ValueError, TypeError):
+                return False
+        
+        # Update deskripsi jika provided
+        if deskripsi is not None:
+            custom_data[kode]["deskripsi"] = deskripsi.strip()
+        
+        return save_custom_produk(custom_data)
+    except Exception as e:
+        logger.error(f"Error editing product {kode}: {e}")
+        return False
+
+def format_list_stok_fixed():
+    """Format list produk untuk display (optional, untuk compatibility)"""
+    try:
+        items = get_list_stok_fixed()
+        msg = "<b>Daftar Produk Tersedia:</b>\n\n"
+        
+        for item in items:
+            status = "✅ Tersedia" if item['sisa_slot'] > 0 else "❌ Habis"
+            msg += f"<code>{item['kode']}</code> | {item['nama']}\n"
+            msg += f"💰 Rp {item['harga']:,} | 📦 {item['sisa_slot']} slot | {status}\n"
+            msg += f"📝 {item['deskripsi']}\n\n"
+            
+        return msg
+    except Exception as e:
+        logger.error(f"Error formatting product list: {e}")
+        return "❌ Gagal memuat daftar produk."
+
+# Fungsi tambahan untuk admin panel
+def get_produk_list_for_admin():
+    """Dapatkan list produk untuk admin panel dengan info lengkap"""
+    try:
+        products = get_list_stok_fixed()
+        custom_data = get_all_custom_produk()
+        
+        result = []
+        for p in products:
+            kode = p["kode"].lower()
+            product_info = p.copy()
+            product_info["is_customized"] = kode in custom_data
+            result.append(product_info)
+            
+        return result
+    except Exception as e:
+        logger.error(f"Error getting product list for admin: {e}")
+        return []
+
+def reset_produk_custom(kode):
+    """Reset custom setting produk ke default"""
+    try:
+        kode = kode.lower()
+        custom_data = load_custom_produk()
+        
+        if kode in custom_data:
+            del custom_data[kode]
+            return save_custom_produk(custom_data)
+        return True  # Already not in custom data
+    except Exception as e:
+        logger.error(f"Error resetting product {kode}: {e}")
+        return False
