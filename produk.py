@@ -1,6 +1,6 @@
 import json
+import os
 from provider import cek_stock_akrab
-from db import get_all_produk_admin, set_produk_admin_harga, set_produk_admin_deskripsi
 
 LIST_PRODUK_TETAP = [
     {"kode": "bpal1",    "nama": "Bonus Akrab L - 1 hari",   "harga": 5000,  "deskripsi": "Paket harian murah"},
@@ -30,17 +30,28 @@ LIST_PRODUK_TETAP = [
     {"kode": "XLA89",    "nama": "MegaBig",                  "harga": 89000, "deskripsi": "MegaBig super paket"}
 ]
 
+CUSTOM_FILE = "produk_custom.json"
+
+def load_custom_produk():
+    if os.path.exists(CUSTOM_FILE):
+        with open(CUSTOM_FILE, "r") as f:
+            return json.load(f)
+    return {}
+
+def save_custom_produk(data):
+    with open(CUSTOM_FILE, "w") as f:
+        json.dump(data, f, indent=2)
+
 def get_all_custom_produk():
     """
-    Ambil semua custom produk dari database (produk_admin)
+    Ambil semua custom produk dari file produk_custom.json
     Return dict: {kode: {harga:..., deskripsi:...}, ...}
-    Abaikan field 'nama' jika ada.
     """
-    custom = get_all_produk_admin()
-    # Hapus field 'nama' jika ada, untuk keamanan
+    data = load_custom_produk()
+    # Hapus field 'nama' jika ada
     result = {}
-    for k, v in custom.items():
-        v = dict(v)  # copy
+    for k, v in data.items():
+        v = dict(v)
         v.pop("nama", None)
         result[k.lower()] = v
     return result
@@ -58,7 +69,7 @@ def get_list_stok_fixed():
     for p in LIST_PRODUK_TETAP:
         kode = p["kode"].lower()
         produk = p.copy()
-        # Override harga/deskripsi custom dari DB jika ada
+        # Override harga/deskripsi custom dari file jika ada
         if kode in custom:
             if custom[kode].get("harga") is not None:
                 produk["harga"] = custom[kode]["harga"]
@@ -87,7 +98,7 @@ def format_list_stok_fixed():
 def get_produk_by_kode(kode):
     kode = kode.lower()
     custom = get_all_custom_produk()
-    stok_map = {p['kode']: p['sisa_slot'] for p in get_list_stok_fixed()}
+    stok_map = {p['kode'].lower(): p['sisa_slot'] for p in get_list_stok_fixed()}
     for produk in LIST_PRODUK_TETAP:
         if produk["kode"].lower() == kode:
             data = produk.copy()
@@ -103,8 +114,12 @@ def get_produk_by_kode(kode):
 
 def edit_produk(kode, harga=None, deskripsi=None):
     kode = kode.lower()
+    data = load_custom_produk()
+    if kode not in data:
+        data[kode] = {}
     if harga is not None:
-        set_produk_admin_harga(kode, harga)
+        data[kode]["harga"] = harga
     if deskripsi is not None:
-        set_produk_admin_deskripsi(kode, deskripsi)
+        data[kode]["deskripsi"] = deskripsi
+    save_custom_produk(data)
     return True
