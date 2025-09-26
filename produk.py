@@ -1,6 +1,6 @@
 import json
 from provider import cek_stock_akrab
-from db import get_all_produk_admin, set_produk_admin_harga, set_produk_admin_deskripsi, set_produk_admin_nama
+from db import get_all_produk_admin, set_produk_admin_harga, set_produk_admin_deskripsi
 
 LIST_PRODUK_TETAP = [
     {"kode": "bpal1",    "nama": "Bonus Akrab L - 1 hari",   "harga": 5000,  "deskripsi": "Paket harian murah"},
@@ -33,7 +33,7 @@ LIST_PRODUK_TETAP = [
 def get_all_custom_produk():
     """
     Ambil semua custom produk dari database (produk_admin)
-    Return dict: {kode: {nama:..., harga:..., deskripsi:...}, ...}
+    Return dict: {kode: {harga:..., deskripsi:...}, ...}
     """
     custom = get_all_produk_admin()
     # Convert all keys to lower for consistency
@@ -52,10 +52,8 @@ def get_list_stok_fixed():
     for p in LIST_PRODUK_TETAP:
         kode = p["kode"].lower()
         produk = p.copy()
-        # Override nama/harga/deskripsi custom dari DB jika ada
+        # Override harga/deskripsi custom dari DB jika ada
         if kode in custom:
-            if custom[kode].get("nama"):
-                produk["nama"] = custom[kode]["nama"]
             if custom[kode].get("harga") is not None:
                 produk["harga"] = custom[kode]["harga"]
             if custom[kode].get("deskripsi"):
@@ -88,8 +86,6 @@ def get_produk_by_kode(kode):
         if produk["kode"].lower() == kode:
             data = produk.copy()
             if kode in custom:
-                if custom[kode].get("nama"):
-                    data["nama"] = custom[kode]["nama"]
                 if custom[kode].get("harga") is not None:
                     data["harga"] = custom[kode]["harga"]
                 if custom[kode].get("deskripsi"):
@@ -99,10 +95,8 @@ def get_produk_by_kode(kode):
             return data
     return None
 
-def edit_produk(kode, nama=None, harga=None, deskripsi=None):
+def edit_produk(kode, harga=None, deskripsi=None):
     kode = kode.lower()
-    if nama is not None:
-        set_produk_admin_nama(kode, nama)
     if harga is not None:
         set_produk_admin_harga(kode, harga)
     if deskripsi is not None:
