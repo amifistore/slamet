@@ -6,7 +6,7 @@ from provider_qris import generate_qris
 from markup import get_menu, produk_inline_keyboard, admin_edit_produk_keyboard, is_admin
 from produk import get_produk_list, edit_produk, get_produk_by_kode
 from utils import (
-    get_saldo, set_saldo, load_riwayat, save_riwayat, load_topup, save_topup, format_stock_akrab
+    get_saldo, set_saldo, load_riwayat, save_riwayat, load_topup, save_topup
 )
 
 CHOOSING_PRODUK, INPUT_TUJUAN, KONFIRMASI, TOPUP_NOMINAL, ADMIN_EDIT = range(5)
@@ -44,9 +44,8 @@ def main_menu_callback(update: Update, context: CallbackContext):
     elif data == 'riwayat':
         riwayat_user(query, context)
     elif data == 'stock_akrab':
-        raw = cek_stock_akrab()
-        msg = format_stock_akrab(raw)
-        query.edit_message_text(msg, parse_mode=ParseMode.HTML, reply_markup=get_menu(user.id))
+        msg = cek_stock_akrab()
+        query.edit_message_text(msg, parse_mode="HTML", reply_markup=get_menu(user.id))
     elif data == 'semua_riwayat' and is_admin(user.id):
         semua_riwayat(query, context)
     elif data == 'lihat_saldo' and is_admin(user.id):
@@ -78,26 +77,36 @@ def main_menu_callback(update: Update, context: CallbackContext):
         query.edit_message_text("Kembali ke menu admin.", reply_markup=get_menu(user.id))
     elif data.startswith("editnama|"):
         context.user_data["edit_field"] = "nama"
-        query.edit_message_text("Tidak bisa edit nama produk provider.", reply_markup=get_menu(user.id))
-        return ConversationHandler.END
+        query.edit_message_text("Masukkan nama baru produk:")
+        return ADMIN_EDIT
     elif data.startswith("editharga|"):
         context.user_data["edit_field"] = "harga"
-        query.edit_message_text("Tidak bisa edit harga produk provider.", reply_markup=get_menu(user.id))
-        return ConversationHandler.END
+        query.edit_message_text("Masukkan harga baru produk (angka):")
+        return ADMIN_EDIT
     elif data.startswith("editkuota|"):
         context.user_data["edit_field"] = "kuota"
-        query.edit_message_text("Tidak bisa edit kuota produk provider.", reply_markup=get_menu(user.id))
-        return ConversationHandler.END
+        query.edit_message_text("Masukkan kuota baru produk (angka):")
+        return ADMIN_EDIT
     elif data.startswith("editdeskripsi|"):
         context.user_data["edit_field"] = "deskripsi"
-        query.edit_message_text("Tidak bisa edit deskripsi produk provider.", reply_markup=get_menu(user.id))
-        return ConversationHandler.END
+        query.edit_message_text("Masukkan deskripsi baru produk:")
+        return ADMIN_EDIT
     else:
         query.edit_message_text("Menu tidak dikenal.", reply_markup=get_menu(user.id))
     return ConversationHandler.END
 
 def admin_edit_produk_step(update: Update, context: CallbackContext):
-    update.message.reply_text("Tidak bisa edit produk provider.", reply_markup=get_menu(update.effective_user.id))
+    kode = context.user_data.get("edit_kode")
+    field = context.user_data.get("edit_field")
+    value = update.message.text.strip()
+    if field == "harga" or field == "kuota":
+        try:
+            value = int(value.replace(".", "").replace(",", ""))
+        except Exception:
+            update.message.reply_text("Input harus berupa angka.")
+            return ADMIN_EDIT
+    edit_produk(kode, field, value)
+    update.message.reply_text(f"{field.capitalize()} produk <b>{kode}</b> berhasil diubah.", parse_mode=ParseMode.HTML, reply_markup=get_menu(update.effective_user.id))
     return ConversationHandler.END
 
 def produk_pilih_callback(update: Update, context: CallbackContext):
@@ -156,7 +165,7 @@ def konfirmasi_step(update: Update, context: CallbackContext):
     )
     if not data or not data.get("refid"):
         err_msg = data.get("message", "Gagal membuat transaksi.") if data else "Tidak ada respon API."
-        update.message.reply_text(f"Gagal membuat transaksi:\n<b>{err_msg}</b>", parse_mode=ParseMode.HTML, reply_markup=get_menu(update.effective_user.id))
+        update.message.reply_text(f"Gagal membuat transaksi:\n<b>{err_msg}</b>", parse_mode="HTML", reply_markup=get_menu(update.effective_user.id))
         return ConversationHandler.END
     riwayat = load_riwayat()
     refid = data["refid"]
@@ -195,6 +204,7 @@ def topup_nominal_step(update: Update, context: CallbackContext):
         return TOPUP_NOMINAL
     context.user_data["topup_nominal"] = nominal
 
+    # Generate QRIS dinamis
     resp = generate_qris(nominal)
     if resp.get("status") != "success":
         update.message.reply_text(f"Gagal generate QRIS: {resp.get('message')}")
@@ -205,6 +215,9 @@ def topup_nominal_step(update: Update, context: CallbackContext):
         update.message.reply_photo(photo=f"data:image/png;base64,{qris_base64}", caption=msg, parse_mode=ParseMode.HTML)
     else:
         update.message.reply_text(msg, parse_mode=ParseMode.HTML)
+    # Simpan riwayat top up jika perlu (topup_user.json)
+    # topup_data = load_topup()
+    # ... tambahkan logika penyimpanan jika ingin tracking/approval
     return ConversationHandler.END
 
 def riwayat_user(query, context):
