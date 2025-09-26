@@ -104,12 +104,11 @@ def admin_edit_produk_step(update: Update, context: CallbackContext):
         update.message.reply_text("❌ Kueri tidak valid. Silakan ulangi.", reply_markup=get_menu(update.effective_user.id))
         return ConversationHandler.END
 
-    # Feedback kompleks untuk admin
     if field == "harga":
         try:
             harga = int(value.replace(".", "").replace(",", ""))
             if harga <= 0:
-                raise ValueError
+                raise ValueError("Harga harus lebih dari 0.")
             edit_produk(kode, harga=harga)
             p_new = get_produk_by_kode(kode)
             update.message.reply_text(
