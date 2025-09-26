@@ -1,6 +1,6 @@
 import json
 from provider import cek_stock_akrab
-from db import get_all_produk_admin, set_produk_admin_harga, set_produk_admin_deskripsi
+from db import get_all_produk_admin, set_produk_admin_harga, set_produk_admin_deskripsi, set_produk_admin_nama
 
 LIST_PRODUK_TETAP = [
     {"kode": "bpal1",    "nama": "Bonus Akrab L - 1 hari",   "harga": 5000,  "deskripsi": "Paket harian murah"},
@@ -31,8 +31,13 @@ LIST_PRODUK_TETAP = [
 ]
 
 def get_all_custom_produk():
+    """
+    Ambil semua custom produk dari database (produk_admin)
+    Return dict: {kode: {nama:..., harga:..., deskripsi:...}, ...}
+    """
     custom = get_all_produk_admin()
-    return {k.lower(): v for k, v in custom.items()}
+    # Convert all keys to lower for consistency
+    return {k.lower(): v for k,v in custom.items()}
 
 def get_list_stok_fixed():
     stok_raw = cek_stock_akrab()
@@ -47,7 +52,7 @@ def get_list_stok_fixed():
     for p in LIST_PRODUK_TETAP:
         kode = p["kode"].lower()
         produk = p.copy()
-        # Ambil nama/harga/deskripsi custom dari DB jika ada
+        # Override nama/harga/deskripsi custom dari DB jika ada
         if kode in custom:
             if custom[kode].get("nama"):
                 produk["nama"] = custom[kode]["nama"]
@@ -62,6 +67,18 @@ def get_list_stok_fixed():
 
 def get_produk_list():
     return get_list_stok_fixed()
+
+def format_list_stok_fixed():
+    items = get_list_stok_fixed()
+    msg = "<b>Kode      | Nama                | Harga   | Sisa Slot</b>\n<pre>"
+    for item in items:
+        kode = item['kode'].ljust(8)
+        nama = item['nama'].ljust(20)
+        harga = str(item['harga']).rjust(7)
+        slot = str(item['sisa_slot']).rjust(4)
+        msg += f"{kode} | {nama} | {harga} | {slot}\n"
+    msg += "</pre>"
+    return msg
 
 def get_produk_by_kode(kode):
     kode = kode.lower()
