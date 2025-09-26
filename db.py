@@ -21,7 +21,7 @@ def init_db():
         c.execute("""CREATE TABLE IF NOT EXISTS topup_pending (
             id TEXT PRIMARY KEY, user_id INTEGER, username TEXT, nama TEXT, nominal REAL, waktu TEXT, status TEXT, bukti_file_id TEXT, bukti_caption TEXT)""")
         c.execute("""CREATE TABLE IF NOT EXISTS produk_admin (
-            kode TEXT PRIMARY KEY, harga REAL, deskripsi TEXT)""")
+            kode TEXT PRIMARY KEY, nama TEXT, harga REAL, deskripsi TEXT)""")
         c.execute("""CREATE TABLE IF NOT EXISTS kode_unik_topup (
             kode TEXT PRIMARY KEY, user_id INTEGER, nominal REAL, digunakan INTEGER DEFAULT 0, dibuat_pada TEXT, digunakan_pada TEXT)""")
         conn.commit()
@@ -195,23 +195,21 @@ def get_topup_by_id(id):
         conn.close()
         return row
 
-# PRODUK ADMIN
-def get_produk_admin(kode):
+# PRODUK ADMIN (Full Custom Support: nama, harga, deskripsi)
+def set_produk_admin_nama(kode, nama):
     with db_lock:
         conn = get_conn()
         c = conn.cursor()
-        c.execute("SELECT harga, deskripsi FROM produk_admin WHERE kode=?", (kode,))
-        row = c.fetchone()
+        c.execute("INSERT OR IGNORE INTO produk_admin (kode, nama, harga, deskripsi) VALUES (?, ?, 0, '')", (kode, nama))
+        c.execute("UPDATE produk_admin SET nama=? WHERE kode=?", (nama, kode))
+        conn.commit()
         conn.close()
-        if row:
-            return {"harga": row[0], "deskripsi": row[1]}
-        return None
 
 def set_produk_admin_harga(kode, harga):
     with db_lock:
         conn = get_conn()
         c = conn.cursor()
-        c.execute("INSERT OR IGNORE INTO produk_admin (kode, harga, deskripsi) VALUES (?, ?, '')", (kode, harga))
+        c.execute("INSERT OR IGNORE INTO produk_admin (kode, nama, harga, deskripsi) VALUES (?, '', ?, '')", (kode, harga))
         c.execute("UPDATE produk_admin SET harga=? WHERE kode=?", (harga, kode))
         conn.commit()
         conn.close()
@@ -220,7 +218,7 @@ def set_produk_admin_deskripsi(kode, deskripsi):
     with db_lock:
         conn = get_conn()
         c = conn.cursor()
-        c.execute("INSERT OR IGNORE INTO produk_admin (kode, harga, deskripsi) VALUES (?, 0, ?)", (kode, deskripsi))
+        c.execute("INSERT OR IGNORE INTO produk_admin (kode, nama, harga, deskripsi) VALUES (?, '', 0, ?)", (kode, deskripsi))
         c.execute("UPDATE produk_admin SET deskripsi=? WHERE kode=?", (deskripsi, kode))
         conn.commit()
         conn.close()
@@ -229,13 +227,26 @@ def get_all_produk_admin():
     with db_lock:
         conn = get_conn()
         c = conn.cursor()
-        c.execute("SELECT kode, harga, deskripsi FROM produk_admin")
+        c.execute("SELECT kode, nama, harga, deskripsi FROM produk_admin")
         rows = c.fetchall()
         conn.close()
         produk_dict = {}
         for row in rows:
-            produk_dict[row[0]] = {"harga": row[1], "deskripsi": row[2]}
+            produk_dict[row[0].lower()] = {
+                "nama": row[1], "harga": row[2], "deskripsi": row[3]
+            }
         return produk_dict
+
+def get_produk_admin(kode):
+    with db_lock:
+        conn = get_conn()
+        c = conn.cursor()
+        c.execute("SELECT nama, harga, deskripsi FROM produk_admin WHERE kode=?", (kode,))
+        row = c.fetchone()
+        conn.close()
+        if row:
+            return {"nama": row[0], "harga": row[1], "deskripsi": row[2]}
+        return None
 
 # KODE UNIK TOPUP
 def simpan_kode_unik(kode, user_id, nominal):
