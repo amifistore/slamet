@@ -1,6 +1,6 @@
 import json
 from telegram import Update, ParseMode, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import CallbackContext, ConversationHandler, MessageHandler, Filters, CallbackQueryHandler
+from telegram.ext import CallbackContext, ConversationHandler, MessageHandler, CallbackQueryHandler, filters
 from provider import create_trx, history, cek_stock_akrab
 from provider_qris import generate_qris
 from markup import get_menu, produk_inline_keyboard, admin_edit_produk_keyboard, is_admin
@@ -73,48 +73,49 @@ def main_menu_callback(update: Update, context: CallbackContext):
             return ConversationHandler.END
         msg = (f"<b>Edit Produk {p['kode']}:</b>\n"
                f"Nama: {p['nama']}\nHarga: Rp {p['harga']:,}\nKuota: {p['kuota']}\nDeskripsi: {p['deskripsi']}\n\n"
-               "Pilih field yang ingin diedit:")
+               "Pilih aksi edit di bawah:")
         query.edit_message_text(msg, parse_mode=ParseMode.HTML, reply_markup=admin_edit_produk_keyboard(kode))
         context.user_data["edit_kode"] = kode
         return ADMIN_EDIT
+    elif data.startswith("editharga|") and is_admin(user.id):
+        kode = data.split("|")[1]
+        context.user_data["edit_kode"] = kode
+        context.user_data["edit_field"] = "harga"
+        query.edit_message_text(f"Masukkan harga baru untuk produk <b>{kode}</b> (angka):", parse_mode=ParseMode.HTML)
+        return ADMIN_EDIT
+    elif data.startswith("editdeskripsi|") and is_admin(user.id):
+        kode = data.split("|")[1]
+        context.user_data["edit_kode"] = kode
+        context.user_data["edit_field"] = "deskripsi"
+        query.edit_message_text(f"Masukkan deskripsi baru untuk produk <b>{kode}</b>:", parse_mode=ParseMode.HTML)
+        return ADMIN_EDIT
+    elif data.startswith("resetcustom|") and is_admin(user.id):
+        from produk import reset_produk_custom
+        kode = data.split("|")[1]
+        ok = reset_produk_custom(kode)
+        if ok:
+            query.edit_message_text(f"Sukses reset custom produk <b>{kode}</b> ke default.", parse_mode=ParseMode.HTML, reply_markup=get_menu(user.id))
+        else:
+            query.edit_message_text(f"Gagal reset custom produk <b>{kode}</b>.", parse_mode=ParseMode.HTML, reply_markup=get_menu(user.id))
+        return ConversationHandler.END
     elif data == "back_admin":
         query.edit_message_text("Kembali ke menu admin.", reply_markup=get_menu(user.id))
+    elif data == "back_main":
+        query.edit_message_text("Kembali ke menu utama.", reply_markup=get_menu(user.id))
     else:
         query.edit_message_text("Menu tidak dikenal.", reply_markup=get_menu(user.id))
     return ConversationHandler.END
 
-# Handler khusus untuk edit produk admin
 def admin_edit_callback(update: Update, context: CallbackContext):
+    # CallbackQueryHandler pada state ADMIN_EDIT
     query = update.callback_query
     user = query.from_user
     data = query.data
     query.answer()
-    
-    if not is_admin(user.id):
-        query.edit_message_text("Akses ditolak.", reply_markup=get_menu(user.id))
-        return ConversationHandler.END
-        
-    if data.startswith("editharga|"):
-        kode = data.split("|")[1]
-        context.user_data["edit_kode"] = kode
-        context.user_data["edit_field"] = "harga"
-        query.edit_message_text(f"Masukkan harga baru untuk produk <b>{kode}</b> (angka):", parse_mode="HTML")
-        return ADMIN_EDIT
-        
-    elif data.startswith("editkuota|"):
-        query.edit_message_text("Stok produk mengikuti provider dan tidak bisa diedit manual.", reply_markup=get_menu(user.id))
-        return ConversationHandler.END
-        
-    elif data.startswith("editdeskripsi|"):
-        kode = data.split("|")[1]
-        context.user_data["edit_kode"] = kode
-        context.user_data["edit_field"] = "deskripsi"
-        query.edit_message_text(f"Masukkan deskripsi baru untuk produk <b>{kode}</b>:", parse_mode="HTML")
-        return ADMIN_EDIT
-        
-    else:
-        query.edit_message_text("Perintah tidak dikenal.", reply_markup=get_menu(user.id))
-        return ConversationHandler.END
+    # Semua cabang edit admin sekarang sudah dipindah ke main_menu_callback,
+    # fungsi ini bisa dibiarkan kosong atau dihapus jika tidak digunakan oleh ConversationHandler.
+    query.edit_message_text("Perintah tidak dikenal.", reply_markup=get_menu(user.id))
+    return ConversationHandler.END
 
 def admin_edit_produk_step(update, context):
     kode = context.user_data.get("edit_kode")
@@ -193,7 +194,6 @@ def admin_edit_produk_step(update, context):
         )
         return ConversationHandler.END
 
-# Fungsi-fungsi lainnya tetap sama...
 def produk_pilih_callback(update: Update, context: CallbackContext):
     query = update.callback_query
     user = query.from_user
@@ -212,6 +212,10 @@ def produk_pilih_callback(update: Update, context: CallbackContext):
             parse_mode=ParseMode.HTML
         )
         return INPUT_TUJUAN
+    elif data == "back_main":
+        query.edit_message_text("Kembali ke menu utama.", reply_markup=get_menu(user.id))
+    else:
+        query.edit_message_text("Menu tidak dikenal.", reply_markup=get_menu(user.id))
     return ConversationHandler.END
 
 def input_tujuan_step(update: Update, context: CallbackContext):
