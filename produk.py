@@ -31,13 +31,8 @@ LIST_PRODUK_TETAP = [
 ]
 
 def get_all_custom_produk():
-    """
-    Ambil semua custom produk dari database (produk_admin)
-    Return dict: {kode: {harga:..., deskripsi:...}, ...}
-    """
     custom = get_all_produk_admin()
-    # Convert all keys to lower for consistency
-    return {k.lower(): v for k,v in custom.items()}
+    return {k.lower(): v for k, v in custom.items()}
 
 def get_list_stok_fixed():
     stok_raw = cek_stock_akrab()
@@ -52,8 +47,10 @@ def get_list_stok_fixed():
     for p in LIST_PRODUK_TETAP:
         kode = p["kode"].lower()
         produk = p.copy()
-        # Override custom from DB, only if exists and value is not None/empty
+        # Ambil nama/harga/deskripsi custom dari DB jika ada
         if kode in custom:
+            if custom[kode].get("nama"):
+                produk["nama"] = custom[kode]["nama"]
             if custom[kode].get("harga") is not None:
                 produk["harga"] = custom[kode]["harga"]
             if custom[kode].get("deskripsi"):
@@ -66,18 +63,6 @@ def get_list_stok_fixed():
 def get_produk_list():
     return get_list_stok_fixed()
 
-def format_list_stok_fixed():
-    items = get_list_stok_fixed()
-    msg = "<b>Kode      | Nama                | Harga   | Sisa Slot</b>\n<pre>"
-    for item in items:
-        kode = item['kode'].ljust(8)
-        nama = item['nama'].ljust(20)
-        harga = str(item['harga']).rjust(7)
-        slot = str(item['sisa_slot']).rjust(4)
-        msg += f"{kode} | {nama} | {harga} | {slot}\n"
-    msg += "</pre>"
-    return msg
-
 def get_produk_by_kode(kode):
     kode = kode.lower()
     custom = get_all_custom_produk()
@@ -86,6 +71,8 @@ def get_produk_by_kode(kode):
         if produk["kode"].lower() == kode:
             data = produk.copy()
             if kode in custom:
+                if custom[kode].get("nama"):
+                    data["nama"] = custom[kode]["nama"]
                 if custom[kode].get("harga") is not None:
                     data["harga"] = custom[kode]["harga"]
                 if custom[kode].get("deskripsi"):
@@ -97,11 +84,10 @@ def get_produk_by_kode(kode):
 
 def edit_produk(kode, nama=None, harga=None, deskripsi=None):
     kode = kode.lower()
-    # Only edit harga/deskripsi ke DB. Nama tetap dari LIST_PRODUK_TETAP,
-    # Jika ingin edit nama juga, perlu tambah kolom nama di produk_admin dan fungsi set_produk_admin_nama
+    if nama is not None:
+        set_produk_admin_nama(kode, nama)
     if harga is not None:
         set_produk_admin_harga(kode, harga)
     if deskripsi is not None:
         set_produk_admin_deskripsi(kode, deskripsi)
-    # Edit nama produk hanya bisa jika kamu tambahkan kolom nama di db dan set_produk_admin_nama!
     return True
