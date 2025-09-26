@@ -108,7 +108,3 @@ def edit_produk(kode, harga=None, deskripsi=None):
     if deskripsi is not None:
         set_produk_admin_deskripsi(kode, deskripsi)
     return True
-        set_produk_admin_harga(kode, harga)
-    if deskripsi is not None:
-        set_produk_admin_deskripsi(kode, deskripsi)
-    return True
