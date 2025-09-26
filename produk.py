@@ -31,7 +31,6 @@ LIST_PRODUK_TETAP = [
 ]
 
 def get_list_stok_fixed():
-    """Ambil stok dari provider dan gabungkan ke list produk tetap."""
     stok_raw = cek_stock_akrab()
     try:
         stok_data = json.loads(stok_raw) if isinstance(stok_raw, str) else stok_raw
@@ -44,11 +43,14 @@ def get_list_stok_fixed():
         kode = p["kode"].lower()
         produk = p.copy()
         produk["sisa_slot"] = slot_map.get(kode, 0)
+        produk["kuota"] = produk["sisa_slot"]   # <--- Tambahkan baris ini!
         output.append(produk)
     return output
 
+def get_produk_list():
+    return get_list_stok_fixed()
+
 def format_list_stok_fixed():
-    """Format hasil get_list_stok_fixed untuk Telegram."""
     items = get_list_stok_fixed()
     msg = "<b>Kode      | Nama                | Harga   | Sisa Slot</b>\n<pre>"
     for item in items:
@@ -61,21 +63,15 @@ def format_list_stok_fixed():
     return msg
 
 def get_produk_by_kode(kode):
-    """Cari produk di list tetap berdasarkan kode, hasilkan detail + stok."""
     kode = kode.lower()
     stok_map = {p['kode']: p['sisa_slot'] for p in get_list_stok_fixed()}
     for produk in LIST_PRODUK_TETAP:
         if produk["kode"].lower() == kode:
             data = produk.copy()
             data["sisa_slot"] = stok_map.get(kode, 0)
+            data["kuota"] = data["sisa_slot"]  # <-- Tambahkan ini juga jika ingin konsisten
             return data
     return None
 
 def edit_produk(*args, **kwargs):
-    # Tidak bisa edit produk jika produk mengikuti provider/daftar tetap.
     pass
-def get_produk_list():
-    """
-    Alias agar tetap kompatibel dengan import lama.
-    """
-    return get_list_stok_fixed()
