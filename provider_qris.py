@@ -254,16 +254,56 @@ class TelegramQRISSender:
             "message": f"Gagal kirim ke Telegram: {error_msg}",
             "response": response
         }
-    
-    def send_qris_simple(self, chat_id: str, nominal: Union[int, str], 
-                        caption: str = "", qris_statis: Optional[str] = None) -> bool:
-        """
-        Simplified version untuk kirim QRIS
-        """
-        result = self.send_qris_to_telegram(chat_id, nominal, caption, qris_statis)
-        return result["status"] == "success"
 
-# Fungsi utility untuk testing
+# =============================================================================
+# LEGACY FUNCTIONS untuk BACKWARD COMPATIBILITY
+# =============================================================================
+
+def get_qris_statis() -> str:
+    """Legacy function - Ambil QRIS statis dari config"""
+    generator = QRISGenerator()
+    return generator.qris_statis_default
+
+def generate_qris(nominal: Union[int, str], qris_statis: Optional[str] = None) -> Dict[str, Any]:
+    """Legacy function - Generate QRIS (compatible dengan code lama)"""
+    generator = QRISGenerator()
+    return generator.generate_qris(nominal, qris_statis)
+
+def qris_base64_to_bytesio(qris_base64: str) -> Optional[io.BytesIO]:
+    """Legacy function - Convert base64 to BytesIO"""
+    if not qris_base64:
+        return None
+        
+    try:
+        # Clean base64 string
+        cleaned_base64 = qris_base64.strip().replace('\n', '').replace('\r', '')
+        
+        # Fix padding
+        missing_padding = len(cleaned_base64) % 4
+        if missing_padding:
+            cleaned_base64 += '=' * (4 - missing_padding)
+        
+        # Decode
+        qris_bytes = base64.b64decode(cleaned_base64)
+        
+        # Create BytesIO
+        bio = io.BytesIO(qris_bytes)
+        bio.name = "qris.png"
+        bio.seek(0)
+        
+        return bio
+        
+    except Exception as e:
+        print(f"[QRIS] Error decode base64: {e}")
+        return None
+
+# Global variable untuk compatibility
+QRIS_STATIS_DEFAULT = get_qris_statis()
+
+# =============================================================================
+# FUNGSI UTILITY UNTUK TESTING
+# =============================================================================
+
 def test_qris_generation():
     """Test QRIS generation saja"""
     print("🔍 Testing QRIS Generation...")
@@ -311,13 +351,18 @@ def test_telegram_send(bot_token: str, chat_id: str):
     else:
         print(f"❌ Gagal: {result['message']}")
 
-# Contoh penggunaan
+# Test jika file di-run langsung
 if __name__ == "__main__":
     print("🚀 QRIS Generator Test Suite")
     print("=" * 50)
     
     # Test QRIS generation
     test_qris_generation()
+    
+    # Test legacy functions
+    print("\n🔧 Testing Legacy Functions...")
+    result = generate_qris(15000)
+    print("Legacy generate_qris result:", result["status"])
     
     # Test Telegram send (ganti dengan token dan chat ID Anda)
     BOT_TOKEN = "YOUR_BOT_TOKEN"  # Ganti dengan token bot Anda
