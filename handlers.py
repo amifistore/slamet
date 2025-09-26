@@ -46,7 +46,7 @@ def main_menu_callback(update: Update, context: CallbackContext):
     elif data == 'stock_akrab':
         raw = cek_stock_akrab()
         msg = format_stock_akrab(raw)
-        query.edit_message_text(msg, parse_mode="HTML", reply_markup=get_menu(user.id))
+        query.edit_message_text(msg, parse_mode=ParseMode.HTML, reply_markup=get_menu(user.id))
     elif data == 'semua_riwayat' and is_admin(user.id):
         semua_riwayat(query, context)
     elif data == 'lihat_saldo' and is_admin(user.id):
@@ -156,7 +156,7 @@ def konfirmasi_step(update: Update, context: CallbackContext):
     )
     if not data or not data.get("refid"):
         err_msg = data.get("message", "Gagal membuat transaksi.") if data else "Tidak ada respon API."
-        update.message.reply_text(f"Gagal membuat transaksi:\n<b>{err_msg}</b>", parse_mode="HTML", reply_markup=get_menu(update.effective_user.id))
+        update.message.reply_text(f"Gagal membuat transaksi:\n<b>{err_msg}</b>", parse_mode=ParseMode.HTML, reply_markup=get_menu(update.effective_user.id))
         return ConversationHandler.END
     riwayat = load_riwayat()
     refid = data["refid"]
