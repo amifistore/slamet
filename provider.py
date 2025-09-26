@@ -1,41 +1,64 @@
+import requests
 import json
-from provider import list_product, cek_stock_akrab
 
-def get_produk_list():
-    produk_raw = list_product()
-    stok_raw = cek_stock_akrab()
-    produk_list = []
+# Load config dari file config.json
+with open("config.json") as f:
+    CONFIG = json.load(f)
+
+API_KEY = CONFIG.get("API_KEY", "")
+BASE_URL = "https://panel.khfy-store.com/api_v2"
+BASE_URL_V3 = "https://panel.khfy-store.com/api_v3"
+
+def list_product():
     try:
-        stok_data = json.loads(stok_raw) if isinstance(stok_raw, str) else stok_raw
-        slot_map = {item["type"].lower(): item["sisa_slot"] for item in stok_data.get("data", [])}
-    except Exception:
-        slot_map = {}
-    if not produk_raw or not isinstance(produk_raw, list):
-        return [{
-            "kode": "-",
-            "nama": "Gagal ambil produk dari provider",
-            "harga": 0,
-            "deskripsi": "Pastikan API_KEY benar dan server provider aktif.",
-            "kuota": 0
-        }]
-    for p in produk_raw:
-        kode = p.get("kode", "").lower()
-        produk_list.append({
-            "kode": kode,
-            "nama": p.get("nama", "-"),
-            "harga": int(p.get("harga", 0)),
-            "deskripsi": p.get("deskripsi", "-"),
-            "kuota": slot_map.get(kode, 0)
-        })
-    return produk_list
+        url = f"{BASE_URL}/list_product"
+        params = {"api_key": API_KEY}
+        resp = requests.get(url, params=params, timeout=15)
+        data = resp.json()
+        return data.get("data", []) if isinstance(data, dict) else []
+    except Exception as e:
+        print("Error list_product:", e)
+        return []
 
-def get_produk_by_kode(kode):
-    kode = kode.lower()
-    for produk in get_produk_list():
-        if produk["kode"] == kode:
-            return produk
-    return None
+def create_trx(produk, tujuan, reff_id=None):
+    try:
+        import uuid
+        if not reff_id:
+            reff_id = str(uuid.uuid4())
+        url = f"{BASE_URL}/trx"
+        params = {
+            "produk": produk,
+            "tujuan": tujuan,
+            "reff_id": reff_id,
+            "api_key": API_KEY
+        }
+        resp = requests.get(url, params=params, timeout=15)
+        data = resp.json()
+        return data
+    except Exception as e:
+        print("Error create_trx:", e)
+        return {"status": "error", "message": str(e)}
 
-def edit_produk(*args, **kwargs):
-    # Tidak bisa edit produk jika produk mengikuti provider.
-    pass
+def history(refid):
+    try:
+        url = f"{BASE_URL}/history"
+        params = {
+            "api_key": API_KEY,
+            "refid": refid
+        }
+        resp = requests.get(url, params=params, timeout=15)
+        data = resp.json()
+        return data
+    except Exception as e:
+        print("Error history:", e)
+        return {"status": "error", "message": str(e)}
+
+def cek_stock_akrab():
+    try:
+        url = f"{BASE_URL_V3}/cek_stock_akrab"
+        params = {"api_key": API_KEY}
+        resp = requests.get(url, params=params, timeout=15)
+        return resp.text
+    except Exception as e:
+        print("Error cek_stock_akrab:", e)
+        return ""
