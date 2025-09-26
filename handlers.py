@@ -78,36 +78,26 @@ def main_menu_callback(update: Update, context: CallbackContext):
         query.edit_message_text("Kembali ke menu admin.", reply_markup=get_menu(user.id))
     elif data.startswith("editnama|"):
         context.user_data["edit_field"] = "nama"
-        query.edit_message_text("Masukkan nama baru produk:")
-        return ADMIN_EDIT
+        query.edit_message_text("Tidak bisa edit nama produk provider.", reply_markup=get_menu(user.id))
+        return ConversationHandler.END
     elif data.startswith("editharga|"):
         context.user_data["edit_field"] = "harga"
-        query.edit_message_text("Masukkan harga baru produk (angka):")
-        return ADMIN_EDIT
+        query.edit_message_text("Tidak bisa edit harga produk provider.", reply_markup=get_menu(user.id))
+        return ConversationHandler.END
     elif data.startswith("editkuota|"):
         context.user_data["edit_field"] = "kuota"
-        query.edit_message_text("Masukkan kuota baru produk (angka):")
-        return ADMIN_EDIT
+        query.edit_message_text("Tidak bisa edit kuota produk provider.", reply_markup=get_menu(user.id))
+        return ConversationHandler.END
     elif data.startswith("editdeskripsi|"):
         context.user_data["edit_field"] = "deskripsi"
-        query.edit_message_text("Masukkan deskripsi baru produk:")
-        return ADMIN_EDIT
+        query.edit_message_text("Tidak bisa edit deskripsi produk provider.", reply_markup=get_menu(user.id))
+        return ConversationHandler.END
     else:
         query.edit_message_text("Menu tidak dikenal.", reply_markup=get_menu(user.id))
     return ConversationHandler.END
 
 def admin_edit_produk_step(update: Update, context: CallbackContext):
-    kode = context.user_data.get("edit_kode")
-    field = context.user_data.get("edit_field")
-    value = update.message.text.strip()
-    if field == "harga" or field == "kuota":
-        try:
-            value = int(value.replace(".", "").replace(",", ""))
-        except Exception:
-            update.message.reply_text("Input harus berupa angka.")
-            return ADMIN_EDIT
-    edit_produk(kode, field, value)
-    update.message.reply_text(f"{field.capitalize()} produk <b>{kode}</b> berhasil diubah.", parse_mode=ParseMode.HTML, reply_markup=get_menu(update.effective_user.id))
+    update.message.reply_text("Tidak bisa edit produk provider.", reply_markup=get_menu(update.effective_user.id))
     return ConversationHandler.END
 
 def produk_pilih_callback(update: Update, context: CallbackContext):
