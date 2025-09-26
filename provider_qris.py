@@ -1,18 +1,12 @@
 import requests
 import json
 import os
-
 import base64
 import io
 
-# Path ke config.json, asumsi 1 folder dengan file ini
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), "config.json")
 
 def get_qris_statis():
-    """
-    Ambil nilai QRIS statis dari config.json.
-    Key harus 'QRIS_STATIS' sesuai dengan config user.
-    """
     try:
         with open(CONFIG_PATH, "r", encoding="utf-8") as f:
             config = json.load(f)
@@ -24,14 +18,6 @@ def get_qris_statis():
 QRIS_STATIS_DEFAULT = get_qris_statis()
 
 def generate_qris(nominal, qris_statis=None):
-    """
-    Memanggil API QRIS Dinamis Generator untuk membuat QR berbasis nominal & QRIS statis merchant.
-    Args:
-        nominal (int|str): Nominal dalam rupiah, minimal 10000.
-        qris_statis (str|None): QRIS statis merchant, jika None ambil dari config.
-    Returns:
-        dict: Hasil request, minimal ada key: status, message, qris_base64 (jika sukses)
-    """
     url = "https://qrisku.my.id/api"
     if not qris_statis:
         qris_statis = QRIS_STATIS_DEFAULT
@@ -68,9 +54,7 @@ def generate_qris(nominal, qris_statis=None):
         return {"status": "error", "message": f"Error: {str(e)}"}
 
 def qris_base64_to_bytesio(qris_base64: str):
-    """
-    Utility untuk decode base64 QRIS menjadi objek BytesIO siap kirim ke Telegram.
-    """
+    """Ubah base64 QRIS menjadi BytesIO supaya bisa dikirim ke Telegram."""
     try:
         qris_bytes = base64.b64decode(qris_base64)
         bio = io.BytesIO(qris_bytes)
