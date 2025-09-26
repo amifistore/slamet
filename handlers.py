@@ -80,26 +80,51 @@ def main_menu_callback(update: Update, context: CallbackContext):
         query.edit_message_text("Kembali ke menu admin.", reply_markup=get_menu(user.id))
     elif data.startswith("editnama|"):
         context.user_data["edit_field"] = "nama"
-        query.edit_message_text("Tidak bisa edit nama produk provider.", reply_markup=get_menu(user.id))
-        return ConversationHandler.END
+        kode = context.user_data.get("edit_kode")
+        query.edit_message_text(f"Masukkan nama baru untuk produk <b>{kode}</b>:", parse_mode="HTML")
+        return ADMIN_EDIT
     elif data.startswith("editharga|"):
         context.user_data["edit_field"] = "harga"
-        query.edit_message_text("Tidak bisa edit harga produk provider.", reply_markup=get_menu(user.id))
-        return ConversationHandler.END
+        kode = context.user_data.get("edit_kode")
+        query.edit_message_text(f"Masukkan harga baru untuk produk <b>{kode}</b> (angka):", parse_mode="HTML")
+        return ADMIN_EDIT
     elif data.startswith("editkuota|"):
-        context.user_data["edit_field"] = "kuota"
-        query.edit_message_text("Tidak bisa edit kuota produk provider.", reply_markup=get_menu(user.id))
+        query.edit_message_text("Stok produk mengikuti provider dan tidak bisa diedit manual.", reply_markup=get_menu(user.id))
         return ConversationHandler.END
     elif data.startswith("editdeskripsi|"):
         context.user_data["edit_field"] = "deskripsi"
-        query.edit_message_text("Tidak bisa edit deskripsi produk provider.", reply_markup=get_menu(user.id))
-        return ConversationHandler.END
+        kode = context.user_data.get("edit_kode")
+        query.edit_message_text(f"Masukkan deskripsi baru untuk produk <b>{kode}</b>:", parse_mode="HTML")
+        return ADMIN_EDIT
     else:
         query.edit_message_text("Menu tidak dikenal.", reply_markup=get_menu(user.id))
     return ConversationHandler.END
 
 def admin_edit_produk_step(update: Update, context: CallbackContext):
-    update.message.reply_text("Tidak bisa edit produk provider.", reply_markup=get_menu(update.effective_user.id))
+    from produk import edit_produk
+    kode = context.user_data.get("edit_kode")
+    field = context.user_data.get("edit_field")
+    value = update.message.text.strip()
+    if not kode or not field:
+        update.message.reply_text("Kueri tidak valid.", reply_markup=get_menu(update.effective_user.id))
+        return ConversationHandler.END
+
+    if field == "harga":
+        try:
+            harga = int(value.replace(".", "").replace(",", ""))
+        except Exception:
+            update.message.reply_text("Format harga tidak valid. Masukkan angka saja.", reply_markup=get_menu(update.effective_user.id))
+            return ADMIN_EDIT
+        edit_produk(kode, harga=harga)
+        update.message.reply_text(f"Harga produk <b>{kode}</b> berhasil diubah.", parse_mode="HTML", reply_markup=get_menu(update.effective_user.id))
+    elif field == "nama":
+        edit_produk(kode, nama=value)
+        update.message.reply_text(f"Nama produk <b>{kode}</b> berhasil diubah.", parse_mode="HTML", reply_markup=get_menu(update.effective_user.id))
+    elif field == "deskripsi":
+        edit_produk(kode, deskripsi=value)
+        update.message.reply_text(f"Deskripsi produk <b>{kode}</b> berhasil diubah.", parse_mode="HTML", reply_markup=get_menu(update.effective_user.id))
+    else:
+        update.message.reply_text("Field tidak dikenal.", reply_markup=get_menu(update.effective_user.id))
     return ConversationHandler.END
 
 def produk_pilih_callback(update: Update, context: CallbackContext):
