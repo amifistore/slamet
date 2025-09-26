@@ -1,42 +1,41 @@
-from utils import load_harga_produk, save_harga_produk
-
-# Static produk default (bisa diubah/ditambah via admin)
-STATIC_BUY_PRODUCTS = [
-    {"kode": "bpal1", "nama": "Bonus Akrab L - 1 hari", "kuota": 999, "harga": 9000, "deskripsi": "Default"},
-    {"kode": "bpal11", "nama": "Bonus Akrab L - 11 hari", "kuota": 999, "harga": 11000, "deskripsi": "Default"},
-    {"kode": "bpal13", "nama": "Bonus Akrab L - 13 hari", "kuota": 999, "harga": 13000, "deskripsi": "Default"},
-    {"kode": "XLA14", "nama": "SuperMini", "kuota": 999, "harga": 14000, "deskripsi": "Default"},
-    # Tambahkan produk lain sesuai kebutuhan
-]
+import json
+from provider import list_product, cek_stock_akrab
 
 def get_produk_list():
-    produk_db = load_harga_produk()
-    result = []
-    for p in STATIC_BUY_PRODUCTS:
-        kode = p["kode"]
-        custom = produk_db.get(kode)
-        if custom:
-            result.append({
-                "kode": kode,
-                "nama": custom.get("nama", p["nama"]),
-                "kuota": custom.get("kuota", p["kuota"]),
-                "harga": custom.get("harga", p["harga"]),
-                "deskripsi": custom.get("deskripsi", p["deskripsi"])
-            })
-        else:
-            result.append(p)
-    return result
-
-def edit_produk(kode, field, value):
-    produk_db = load_harga_produk()
-    if kode not in produk_db:
-        produk_db[kode] = {}
-    produk_db[kode][field] = value
-    save_harga_produk(produk_db)
+    produk_raw = list_product()
+    stok_raw = cek_stock_akrab()
+    produk_list = []
+    try:
+        stok_data = json.loads(stok_raw) if isinstance(stok_raw, str) else stok_raw
+        slot_map = {item["type"].lower(): item["sisa_slot"] for item in stok_data.get("data", [])}
+    except Exception:
+        slot_map = {}
+    if not produk_raw or not isinstance(produk_raw, list):
+        return [{
+            "kode": "-",
+            "nama": "Gagal ambil produk dari provider",
+            "harga": 0,
+            "deskripsi": "Pastikan API_KEY benar dan server provider aktif.",
+            "kuota": 0
+        }]
+    for p in produk_raw:
+        kode = p.get("kode", "").lower()
+        produk_list.append({
+            "kode": kode,
+            "nama": p.get("nama", "-"),
+            "harga": int(p.get("harga", 0)),
+            "deskripsi": p.get("deskripsi", "-"),
+            "kuota": slot_map.get(kode, 0)
+        })
+    return produk_list
 
 def get_produk_by_kode(kode):
-    produk_list = get_produk_list()
-    for p in produk_list:
-        if p["kode"] == kode:
-            return p
+    kode = kode.lower()
+    for produk in get_produk_list():
+        if produk["kode"] == kode:
+            return produk
     return None
+
+def edit_produk(*args, **kwargs):
+    # Tidak bisa edit produk jika produk mengikuti provider.
+    pass
