@@ -95,56 +95,75 @@ def main_menu_callback(update: Update, context: CallbackContext):
         query.edit_message_text("Menu tidak dikenal.", reply_markup=get_menu(user.id))
     return ConversationHandler.END
 
-def admin_edit_produk_step(update: Update, context: CallbackContext):
+def admin_edit_produk_step(update, context):
     kode = context.user_data.get("edit_kode")
     field = context.user_data.get("edit_field")
     value = update.message.text.strip()
     p = get_produk_by_kode(kode)
     if not kode or not field or not p:
-        update.message.reply_text("❌ Kueri tidak valid. Silakan ulangi.", reply_markup=get_menu(update.effective_user.id))
+        update.message.reply_text(
+            "❌ Kueri tidak valid. Silakan ulangi.",
+            reply_markup=get_menu(update.effective_user.id)
+        )
         return ConversationHandler.END
 
+    # Edit harga
     if field == "harga":
         try:
             harga = int(value.replace(".", "").replace(",", ""))
             if harga <= 0:
                 raise ValueError("Harga harus lebih dari 0.")
+            old_harga = p["harga"]
             edit_produk(kode, harga=harga)
             p_new = get_produk_by_kode(kode)
             update.message.reply_text(
-                f"✅ Harga produk berhasil diupdate!\n\n"
+                f"✅ <b>Harga produk berhasil diupdate!</b>\n\n"
                 f"Produk: <b>{kode}</b> - {p_new['nama']}\n"
-                f"Harga lama: Rp {p['harga']:,}\n"
+                f"Harga lama: <s>Rp {old_harga:,}</s>\n"
                 f"Harga baru: <b>Rp {p_new['harga']:,}</b>\n"
                 f"Deskripsi: {p_new['deskripsi']}",
-                parse_mode="HTML", reply_markup=get_menu(update.effective_user.id)
+                parse_mode="HTML",
+                reply_markup=get_menu(update.effective_user.id)
             )
         except Exception as e:
             update.message.reply_text(
-                f"❌ <b>Gagal update harga produk!</b>\nProduk: <b>{kode}</b> - {p['nama']}\nError: {e}",
-                parse_mode="HTML", reply_markup=get_menu(update.effective_user.id)
+                f"❌ <b>Gagal update harga produk!</b>\n"
+                f"Produk: <b>{kode}</b> - {p['nama']}\n"
+                f"Error: {e}",
+                parse_mode="HTML",
+                reply_markup=get_menu(update.effective_user.id)
             )
         return ConversationHandler.END
 
+    # Edit deskripsi
     elif field == "deskripsi":
         try:
+            old_deskripsi = p["deskripsi"]
             edit_produk(kode, deskripsi=value)
             p_new = get_produk_by_kode(kode)
             update.message.reply_text(
-                f"✅ Deskripsi produk berhasil diupdate!\n\n"
+                f"✅ <b>Deskripsi produk berhasil diupdate!</b>\n\n"
                 f"Produk: <b>{kode}</b> - {p_new['nama']}\n"
-                f"Deskripsi baru: <code>{p_new['deskripsi']}</code>",
-                parse_mode="HTML", reply_markup=get_menu(update.effective_user.id)
+                f"Deskripsi lama: <code>{old_deskripsi}</code>\n"
+                f"Deskripsi baru: <b>{p_new['deskripsi']}</b>",
+                parse_mode="HTML",
+                reply_markup=get_menu(update.effective_user.id)
             )
         except Exception as e:
             update.message.reply_text(
-                f"❌ <b>Gagal update deskripsi produk!</b>\nProduk: <b>{kode}</b> - {p['nama']}\nError: {e}",
-                parse_mode="HTML", reply_markup=get_menu(update.effective_user.id)
+                f"❌ <b>Gagal update deskripsi produk!</b>\n"
+                f"Produk: <b>{kode}</b> - {p['nama']}\n"
+                f"Error: {e}",
+                parse_mode="HTML",
+                reply_markup=get_menu(update.effective_user.id)
             )
         return ConversationHandler.END
 
     else:
-        update.message.reply_text("❌ Field tidak dikenal.", reply_markup=get_menu(update.effective_user.id))
+        update.message.reply_text(
+            "❌ Field tidak dikenal.",
+            reply_markup=get_menu(update.effective_user.id)
+        )
         return ConversationHandler.END
 
 def produk_pilih_callback(update: Update, context: CallbackContext):
