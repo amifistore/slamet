@@ -1,6 +1,6 @@
 import json
 from telegram import Update, ParseMode, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import CallbackContext, ConversationHandler
+from telegram.ext import CallbackContext, ConversationHandler, MessageHandler, Filters, CallbackQueryHandler
 from provider import create_trx, history, cek_stock_akrab
 from provider_qris import generate_qris
 from markup import get_menu, produk_inline_keyboard, admin_edit_produk_keyboard, is_admin
@@ -96,6 +96,7 @@ def main_menu_callback(update: Update, context: CallbackContext):
     return ConversationHandler.END
 
 def admin_edit_produk_step(update, context):
+    print("DEBUG: masuk handler admin_edit_produk_step")
     kode = context.user_data.get("edit_kode")
     field = context.user_data.get("edit_field")
     value = update.message.text.strip()
@@ -107,7 +108,6 @@ def admin_edit_produk_step(update, context):
         )
         return ConversationHandler.END
 
-    # Edit harga
     if field == "harga":
         try:
             harga = int(value.replace(".", "").replace(",", ""))
@@ -135,7 +135,6 @@ def admin_edit_produk_step(update, context):
             )
         return ConversationHandler.END
 
-    # Edit deskripsi
     elif field == "deskripsi":
         try:
             old_deskripsi = p["deskripsi"]
@@ -332,3 +331,20 @@ def handle_text(update: Update, context: CallbackContext):
             update.message.reply_text("Nilai tidak valid.", reply_markup=get_menu(user.id))
     else:
         update.message.reply_text("Gunakan menu.", reply_markup=get_menu(user.id))
+
+# Tambahkan ConversationHandler dengan mapping yang benar untuk ADMIN_EDIT
+# from telegram.ext import Updater
+# updater = Updater(token='TOKEN')
+# dispatcher = updater.dispatcher
+# conv_handler = ConversationHandler(
+#     entry_points=[CallbackQueryHandler(main_menu_callback)],
+#     states={
+#         CHOOSING_PRODUK: [CallbackQueryHandler(produk_pilih_callback)],
+#         INPUT_TUJUAN: [MessageHandler(Filters.text & ~Filters.command, input_tujuan_step)],
+#         KONFIRMASI: [MessageHandler(Filters.text & ~Filters.command, konfirmasi_step)],
+#         TOPUP_NOMINAL: [MessageHandler(Filters.text & ~Filters.command, topup_nominal_step)],
+#         ADMIN_EDIT: [MessageHandler(Filters.text & ~Filters.command, admin_edit_produk_step)],
+#     },
+#     fallbacks=[]
+# )
+# dispatcher.add_handler(conv_handler)
