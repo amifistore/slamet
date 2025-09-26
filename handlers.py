@@ -247,6 +247,8 @@ def produk_pilih_callback(update: Update, context: CallbackContext):
     data = query.data
     query.answer()
     
+    print(f"🔍 Callback data: {data}")  # Debug log
+    
     if data.startswith("produk_static|"):
         try:
             idx = int(data.split("|")[1])
@@ -264,6 +266,7 @@ def produk_pilih_callback(update: Update, context: CallbackContext):
             return INPUT_TUJUAN
         
         except (ValueError, IndexError) as e:
+            print(f"❌ Error memilih produk: {e}")
             query.edit_message_text("❌ Error memilih produk.", reply_markup=get_menu(user.id))
             return ConversationHandler.END
     
@@ -272,9 +275,10 @@ def produk_pilih_callback(update: Update, context: CallbackContext):
         return ConversationHandler.END
     
     else:
+        # Jika callback tidak dikenali, arahkan ke main menu
+        print(f"❌ Callback tidak dikenali: {data}")
         query.edit_message_text("Menu tidak dikenal.", reply_markup=get_menu(user.id))
         return ConversationHandler.END
-
 def input_tujuan_step(update: Update, context: CallbackContext):
     tujuan = update.message.text.strip()
     
