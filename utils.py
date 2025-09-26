@@ -41,9 +41,18 @@ def save_topup(topup):
 
 def format_stock_akrab(json_data):
     import json as _json
-    if isinstance(json_data, str):
-        json_data = _json.loads(json_data)
-    items = json_data.get("data", [])
+    if not json_data or (isinstance(json_data, str) and not json_data.strip()):
+        return "<b>❌ Gagal mengambil data stok dari provider.</b>\nSilakan cek koneksi/API provider."
+    if isinstance(json_data, dict):
+        data = json_data
+    else:
+        try:
+            data = _json.loads(json_data)
+        except Exception as e:
+            return f"<b>❌ Error parsing data stok:</b>\n<pre>{e}\n{json_data}</pre>"
+    items = data.get("data", [])
+    if not items:
+        return "<b>Stok kosong atau tidak ditemukan.</b>"
     msg = "<b>📊 Cek Stok Produk Akrab:</b>\n\n"
     msg += "<b>Kode      | Nama                | Sisa Slot</b>\n"
     msg += "<pre>"
