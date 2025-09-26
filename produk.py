@@ -30,14 +30,20 @@ LIST_PRODUK_TETAP = [
     {"kode": "XLA89",    "nama": "MegaBig",                  "harga": 89000, "deskripsi": "MegaBig super paket"}
 ]
 
-def get_all_custom_produk():
+ef get_all_custom_produk():
     """
     Ambil semua custom produk dari database (produk_admin)
     Return dict: {kode: {harga:..., deskripsi:...}, ...}
+    Abaikan field 'nama' jika ada.
     """
     custom = get_all_produk_admin()
-    # Convert all keys to lower for consistency
-    return {k.lower(): v for k,v in custom.items()}
+    # Hapus field 'nama' jika ada, untuk keamanan
+    result = {}
+    for k, v in custom.items():
+        v = dict(v)  # copy
+        v.pop("nama", None)
+        result[k.lower()] = v
+    return result
 
 def get_list_stok_fixed():
     stok_raw = cek_stock_akrab()
@@ -98,6 +104,10 @@ def get_produk_by_kode(kode):
 def edit_produk(kode, harga=None, deskripsi=None):
     kode = kode.lower()
     if harga is not None:
+        set_produk_admin_harga(kode, harga)
+    if deskripsi is not None:
+        set_produk_admin_deskripsi(kode, deskripsi)
+    return True
         set_produk_admin_harga(kode, harga)
     if deskripsi is not None:
         set_produk_admin_deskripsi(kode, deskripsi)
