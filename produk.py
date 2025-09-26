@@ -30,7 +30,7 @@ LIST_PRODUK_TETAP = [
     {"kode": "XLA89",    "nama": "MegaBig",                  "harga": 89000, "deskripsi": "MegaBig super paket"}
 ]
 
-ef get_all_custom_produk():
+def get_all_custom_produk():
     """
     Ambil semua custom produk dari database (produk_admin)
     Return dict: {kode: {harga:..., deskripsi:...}, ...}
