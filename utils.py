@@ -1,10 +1,6 @@
 import os
 import json
-
-SALDO_FILE = 'saldo.json'
-RIWAYAT_FILE = 'riwayat_transaksi.json'
-HARGA_PRODUK_FILE = 'harga_produk.json'
-TOPUP_FILE = 'topup_user.json'
+from config import SALDO_FILE, RIWAYAT_FILE, HARGA_PRODUK_FILE, TOPUP_FILE
 
 def load_json(filename, fallback=None):
     if os.path.exists(filename):
@@ -42,28 +38,3 @@ def load_topup():
 
 def save_topup(topup):
     save_json(TOPUP_FILE, topup)
-
-def format_stock_akrab(json_data):
-    import json as _json
-    if not json_data or (isinstance(json_data, str) and not json_data.strip()):
-        return "<b>❌ Gagal mengambil data stok dari provider.</b>\nSilakan cek koneksi/API provider."
-    if isinstance(json_data, dict):
-        data = json_data
-    else:
-        try:
-            data = _json.loads(json_data)
-        except Exception as e:
-            return f"<b>❌ Error parsing data stok:</b>\n<pre>{e}\n{json_data}</pre>"
-    items = data.get("data", [])
-    if not items:
-        return "<b>Stok kosong atau tidak ditemukan.</b>"
-    msg = "<b>📊 Cek Stok Produk Akrab:</b>\n\n"
-    msg += "<b>Kode      | Nama                | Sisa Slot</b>\n"
-    msg += "<pre>"
-    for item in items:
-        kode = item['type'].ljust(8)
-        nama = item['nama'].ljust(20)
-        slot = str(item['sisa_slot']).rjust(4)
-        msg += f"{kode} | {nama} | {slot}\n"
-    msg += "</pre>"
-    return msg
