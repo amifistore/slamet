@@ -1,6 +1,6 @@
 import json
 from telegram import Update, ParseMode, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import CallbackContext, ConversationHandler, MessageHandler, CallbackQueryHandler, filters
+from telegram.ext import CallbackContext, ConversationHandler, MessageHandler, Filters
 from provider import create_trx, history, cek_stock_akrab
 from provider_qris import generate_qris
 from markup import get_menu, produk_inline_keyboard, admin_edit_produk_keyboard, is_admin
@@ -19,6 +19,15 @@ def start(update: Update, context: CallbackContext):
         reply_markup=get_menu(user.id)
     )
 
+def cancel(update: Update, context: CallbackContext):
+    user = update.effective_user
+    context.user_data.clear()
+    update.message.reply_text(
+        "Operasi dibatalkan.",
+        reply_markup=get_menu(user.id)
+    )
+    return ConversationHandler.END
+
 def main_menu_callback(update: Update, context: CallbackContext):
     query = update.callback_query
     user = query.from_user
@@ -34,18 +43,26 @@ def main_menu_callback(update: Update, context: CallbackContext):
         return ConversationHandler.END
     
     elif data == 'beli_produk':
-        query.edit_message_text("Pilih produk yang ingin dibeli:", reply_markup=produk_inline_keyboard())
+        query.edit_message_text(
+            "Pilih produk yang ingin dibeli:", 
+            reply_markup=produk_inline_keyboard()
+        )
         context.user_data.clear()
         return CHOOSING_PRODUK
     
     elif data == 'topup':
         query.edit_message_text(
-            "Masukkan nominal Top Up saldo yang diinginkan (minimal 10.000):",
-            parse_mode=ParseMode.HTML, reply_markup=get_menu(user.id))
+            "Masukkan nominal Top Up saldo yang diinginkan (minimal 10.000):\n\nKetik /batal untuk membatalkan.",
+            parse_mode=ParseMode.HTML
+        )
         return TOPUP_NOMINAL
     
     elif data == 'cek_status':
-        query.edit_message_text("Kirim format: <code>CEK|refid</code>", parse_mode=ParseMode.HTML, reply_markup=get_menu(user.id))
+        query.edit_message_text(
+            "Kirim format: <code>CEK|refid</code>\nContoh: <code>CEK|TRX123456</code>", 
+            parse_mode=ParseMode.HTML, 
+            reply_markup=get_menu(user.id)
+        )
         return ConversationHandler.END
     
     elif data == 'riwayat':
@@ -103,14 +120,20 @@ def main_menu_callback(update: Update, context: CallbackContext):
         kode = data.split("|")[1]
         context.user_data["edit_kode"] = kode
         context.user_data["edit_field"] = "harga"
-        query.edit_message_text(f"Masukkan harga baru untuk produk <b>{kode}</b> (angka):", parse_mode=ParseMode.HTML)
+        query.edit_message_text(
+            f"Masukkan harga baru untuk produk <b>{kode}</b> (angka):\n\nKetik /batal untuk membatalkan.", 
+            parse_mode=ParseMode.HTML
+        )
         return ADMIN_EDIT
     
     elif data.startswith("editdeskripsi|") and is_admin(user.id):
         kode = data.split("|")[1]
         context.user_data["edit_kode"] = kode
         context.user_data["edit_field"] = "deskripsi"
-        query.edit_message_text(f"Masukkan deskripsi baru untuk produk <b>{kode}</b>:", parse_mode=ParseMode.HTML)
+        query.edit_message_text(
+            f"Masukkan deskripsi baru untuk produk <b>{kode}</b>:\n\nKetik /batal untuk membatalkan.", 
+            parse_mode=ParseMode.HTML
+        )
         return ADMIN_EDIT
     
     elif data.startswith("resetcustom|") and is_admin(user.id):
@@ -118,9 +141,9 @@ def main_menu_callback(update: Update, context: CallbackContext):
         kode = data.split("|")[1]
         ok = reset_produk_custom(kode)
         if ok:
-            query.edit_message_text(f"Sukses reset custom produk <b>{kode}</b> ke default.", parse_mode=ParseMode.HTML, reply_markup=get_menu(user.id))
+            query.edit_message_text(f"✅ Sukses reset custom produk <b>{kode}</b> ke default.", parse_mode=ParseMode.HTML, reply_markup=get_menu(user.id))
         else:
-            query.edit_message_text(f"Gagal reset custom produk <b>{kode}</b>.", parse_mode=ParseMode.HTML, reply_markup=get_menu(user.id))
+            query.edit_message_text(f"❌ Gagal reset custom produk <b>{kode}</b>.", parse_mode=ParseMode.HTML, reply_markup=get_menu(user.id))
         return ConversationHandler.END
     
     elif data == "back_admin":
@@ -136,6 +159,7 @@ def main_menu_callback(update: Update, context: CallbackContext):
         return ConversationHandler.END
 
 def admin_edit_produk_step(update: Update, context: CallbackContext):
+    # Handle text input for admin editing
     kode = context.user_data.get("edit_kode")
     field = context.user_data.get("edit_field")
     value = update.message.text.strip()
@@ -209,7 +233,6 @@ def admin_edit_produk_step(update: Update, context: CallbackContext):
         )
     
     finally:
-        # Clear user data
         context.user_data.pop("edit_kode", None)
         context.user_data.pop("edit_field", None)
     
@@ -226,19 +249,19 @@ def produk_pilih_callback(update: Update, context: CallbackContext):
             idx = int(data.split("|")[1])
             produk_list = get_produk_list()
             if idx < 0 or idx >= len(produk_list):
-                query.edit_message_text("Produk tidak valid.", reply_markup=get_menu(user.id))
+                query.edit_message_text("❌ Produk tidak valid.", reply_markup=get_menu(user.id))
                 return ConversationHandler.END
             
             p = produk_list[idx]
             context.user_data["produk"] = p
             query.edit_message_text(
-                f"Produk yang dipilih:\n<b>{p['kode']}</b> - {p['nama']}\nHarga: Rp {p['harga']:,}\nKuota: {p['kuota']}\n\nSilakan input nomor tujuan:",
+                f"✅ Produk yang dipilih:\n<b>{p['kode']}</b> - {p['nama']}\nHarga: Rp {p['harga']:,}\nKuota: {p['kuota']}\n\nSilakan input nomor tujuan:\n\nKetik /batal untuk membatalkan.",
                 parse_mode=ParseMode.HTML
             )
             return INPUT_TUJUAN
         
         except (ValueError, IndexError) as e:
-            query.edit_message_text("Error memilih produk.", reply_markup=get_menu(user.id))
+            query.edit_message_text("❌ Error memilih produk.", reply_markup=get_menu(user.id))
             return ConversationHandler.END
     
     elif data == "back_main":
@@ -261,7 +284,7 @@ def input_tujuan_step(update: Update, context: CallbackContext):
     p = context.user_data.get("produk")
     
     update.message.reply_text(
-        f"Konfirmasi pesanan:\nProduk: <b>{p['kode']}</b> - {p['nama']}\nHarga: Rp {p['harga']:,}\nNomor: <b>{tujuan}</b>\n\nKetik 'YA' untuk konfirmasi atau 'BATAL' untuk membatalkan.",
+        f"📋 Konfirmasi pesanan:\n\nProduk: <b>{p['kode']}</b> - {p['nama']}\nHarga: Rp {p['harga']:,}\nNomor: <b>{tujuan}</b>\n\nKetik 'YA' untuk konfirmasi atau 'BATAL' untuk membatalkan.",
         parse_mode=ParseMode.HTML
     )
     return KONFIRMASI
@@ -274,7 +297,7 @@ def konfirmasi_step(update: Update, context: CallbackContext):
         return ConversationHandler.END
     
     if text != "YA":
-        update.message.reply_text("Ketik 'YA' untuk konfirmasi atau 'BATAL' untuk batal.")
+        update.message.reply_text("❌ Ketik 'YA' untuk konfirmasi atau 'BATAL' untuk batal.")
         return KONFIRMASI
     
     # Get transaction data
@@ -327,7 +350,7 @@ def konfirmasi_step(update: Update, context: CallbackContext):
         set_saldo(saldo - harga)
         
         update.message.reply_text(
-            f"✅ Transaksi dibuat!\nProduk: {p['kode']}\nTujuan: {tujuan}\nRefID: <code>{refid}</code>\nStatus: {data.get('status','pending')}\nSaldo bot: Rp {saldo-harga:,}",
+            f"✅ Transaksi berhasil!\n\n📦 Produk: {p['kode']}\n📱 Tujuan: {tujuan}\n🔢 RefID: <code>{refid}</code>\n📊 Status: {data.get('status','pending')}\n💰 Saldo bot: Rp {saldo-harga:,}",
             parse_mode=ParseMode.HTML,
             reply_markup=get_menu(user.id)
         )
@@ -340,7 +363,6 @@ def konfirmasi_step(update: Update, context: CallbackContext):
         )
     
     finally:
-        # Clear user data
         context.user_data.clear()
     
     return ConversationHandler.END
@@ -354,8 +376,6 @@ def topup_nominal_step(update: Update, context: CallbackContext):
             update.message.reply_text("❌ Nominal minimal 10.000. Masukkan kembali nominal:")
             return TOPUP_NOMINAL
         
-        context.user_data["topup_nominal"] = nominal
-
         # Generate QRIS
         resp = generate_qris(nominal)
         if resp.get("status") != "success":
@@ -363,7 +383,7 @@ def topup_nominal_step(update: Update, context: CallbackContext):
             return ConversationHandler.END
         
         qris_base64 = resp.get("qris_base64")
-        msg = f"Silakan lakukan pembayaran Top Up sebesar <b>Rp {nominal:,}</b>\n\nScan QRIS berikut:"
+        msg = f"💰 Silakan lakukan pembayaran Top Up sebesar <b>Rp {nominal:,}</b>\n\nScan QRIS berikut:"
         
         if qris_base64:
             update.message.reply_photo(
@@ -389,12 +409,14 @@ def riwayat_user(query, context):
         items = [r for r in riwayat.values() if r.get("user_id") == user.id]
         items = sorted(items, key=lambda x: x.get("waktu", ""), reverse=True)
         
-        msg = "<b>Riwayat Transaksi Anda:</b>\n"
+        msg = "<b>📜 Riwayat Transaksi Anda:</b>\n\n"
         for r in items[:10]:
             msg += (
-                f"{r.get('waktu','')} | <code>{r['reffid']}</code>\n"
-                f"{r['produk']} ke {r['tujuan']} | Rp {r['harga']:,}\n"
-                f"Status: <b>{r['status_text']}</b>\n\n"
+                f"⏰ {r.get('waktu','')}\n"
+                f"🔢 RefID: <code>{r['reffid']}</code>\n"
+                f"📦 {r['produk']} ke {r['tujuan']}\n"
+                f"💰 Rp {r['harga']:,}\n"
+                f"📊 Status: <b>{r['status_text']}</b>\n\n"
             )
         if not items:
             msg += "Belum ada transaksi."
@@ -408,12 +430,15 @@ def semua_riwayat(query, context):
         riwayat = list(load_riwayat().values())
         riwayat = sorted(riwayat, key=lambda x: x.get("waktu", ""), reverse=True)
         
-        msg = "<b>Semua Riwayat Transaksi (max 30):</b>\n"
+        msg = "<b>📜 Semua Riwayat Transaksi (max 30):</b>\n\n"
         for r in riwayat[:30]:
             msg += (
-                f"{r.get('waktu','')} | <code>{r['reffid']}</code>\n"
-                f"{r['produk']} ke {r['tujuan']} | Rp {r['harga']:,}\n"
-                f"Status: <b>{r['status_text']}</b> | User: {r.get('username','-')}\n\n"
+                f"⏰ {r.get('waktu','')}\n"
+                f"🔢 RefID: <code>{r['reffid']}</code>\n"
+                f"📦 {r['produk']} ke {r['tujuan']}\n"
+                f"💰 Rp {r['harga']:,}\n"
+                f"📊 Status: <b>{r['status_text']}</b>\n"
+                f"👤 User: {r.get('username','-')}\n\n"
             )
         if not riwayat:
             msg += "Belum ada transaksi."
@@ -435,17 +460,12 @@ def handle_text(update: Update, context: CallbackContext):
                 return
                 
             data = history(refid)
-            update.message.reply_text(
-                f"<b>Respon API:</b>\n<pre>{json.dumps(data, indent=2, ensure_ascii=False)}</pre>",
-                parse_mode=ParseMode.HTML,
-                reply_markup=get_menu(user.id)
-            )
             
             if not data:
                 update.message.reply_text("❌ Gagal cek status transaksi.", reply_markup=get_menu(user.id))
                 return
                 
-            msg = f"Status transaksi <code>{refid}</code>:\n"
+            msg = f"🔍 Status transaksi <code>{refid}</code>:\n\n"
             for k, v in data.items():
                 msg += f"<b>{k}</b>: {v}\n"
             update.message.reply_text(msg, parse_mode=ParseMode.HTML, reply_markup=get_menu(user.id))
@@ -471,9 +491,27 @@ def handle_text(update: Update, context: CallbackContext):
             update.message.reply_text(f"❌ Error: {str(e)}", reply_markup=get_menu(user.id))
     
     else:
-        update.message.reply_text("❌ Perintah tidak dikenali. Gunakan menu.", reply_markup=get_menu(user.id))
+        # Only show this message if not in any conversation
+        if not context.user_data:
+            update.message.reply_text(
+                "❌ Perintah tidak dikenali. Gunakan menu di bawah.", 
+                reply_markup=get_menu(user.id)
+            )
 
-# Remove unused function
-# def admin_edit_callback(update: Update, context: CallbackContext):
-#     # This function is no longer needed as the logic is handled in main_menu_callback
-#     pass
+# Create conversation handler
+def get_conversation_handler():
+    return ConversationHandler(
+        entry_points=[CallbackQueryHandler(main_menu_callback)],
+        states={
+            CHOOSING_PRODUK: [CallbackQueryHandler(produk_pilih_callback)],
+            INPUT_TUJUAN: [MessageHandler(Filters.text & ~Filters.command, input_tujuan_step)],
+            KONFIRMASI: [MessageHandler(Filters.text & ~Filters.command, konfirmasi_step)],
+            TOPUP_NOMINAL: [MessageHandler(Filters.text & ~Filters.command, topup_nominal_step)],
+            ADMIN_EDIT: [MessageHandler(Filters.text & ~Filters.command, admin_edit_produk_step)],
+        },
+        fallbacks=[
+            MessageHandler(Filters.command, cancel),
+            MessageHandler(Filters.text, handle_text)
+        ],
+        allow_reentry=True
+    )
