@@ -1,7 +1,8 @@
 import json
 from provider import cek_stock_akrab
 
-# Daftar produk tetap (urutan, nama, harga, dan deskripsi bisa kamu rubah sesuai keinginan)
+PRODUK_CUSTOM_FILE = "produk_custom.json"
+
 LIST_PRODUK_TETAP = [
     {"kode": "bpal1",    "nama": "Bonus Akrab L - 1 hari",   "harga": 5000,  "deskripsi": "Paket harian murah"},
     {"kode": "bpal11",   "nama": "Bonus Akrab L - 11 hari",  "harga": 50000, "deskripsi": "Paket 11 hari hemat"},
@@ -27,8 +28,19 @@ LIST_PRODUK_TETAP = [
     {"kode": "XLA39",    "nama": "Big",                      "harga": 39000, "deskripsi": "Big paket"},
     {"kode": "XLA51",    "nama": "Jumbo V2",                 "harga": 51000, "deskripsi": "Jumbo paket"},
     {"kode": "XLA65",    "nama": "JUMBO",                    "harga": 65000, "deskripsi": "Jumbo paket spesial"},
-    {"kode": "XLA89",    "nama": "MegaBig",                  "harga": 89000, "deskripsi": "MegaBig super paket"},
+    {"kode": "XLA89",    "nama": "MegaBig",                  "harga": 89000, "deskripsi": "MegaBig super paket"}
 ]
+
+def load_custom_produk():
+    try:
+        with open(PRODUK_CUSTOM_FILE) as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+def save_custom_produk(data):
+    with open(PRODUK_CUSTOM_FILE, "w") as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
 
 def get_list_stok_fixed():
     stok_raw = cek_stock_akrab()
@@ -38,12 +50,15 @@ def get_list_stok_fixed():
     except Exception:
         slot_map = {}
 
+    custom = load_custom_produk()
     output = []
     for p in LIST_PRODUK_TETAP:
         kode = p["kode"].lower()
         produk = p.copy()
+        if kode in custom:
+            produk.update(custom[kode])  # Penting: override dengan custom!
         produk["sisa_slot"] = slot_map.get(kode, 0)
-        produk["kuota"] = produk["sisa_slot"]   # <--- Tambahkan baris ini!
+        produk["kuota"] = produk["sisa_slot"]
         output.append(produk)
     return output
 
@@ -64,14 +79,30 @@ def format_list_stok_fixed():
 
 def get_produk_by_kode(kode):
     kode = kode.lower()
+    custom = load_custom_produk()
     stok_map = {p['kode']: p['sisa_slot'] for p in get_list_stok_fixed()}
     for produk in LIST_PRODUK_TETAP:
         if produk["kode"].lower() == kode:
             data = produk.copy()
+            if kode in custom:
+                data.update(custom[kode])  # Penting: override dengan custom!
             data["sisa_slot"] = stok_map.get(kode, 0)
-            data["kuota"] = data["sisa_slot"]  # <-- Tambahkan ini juga jika ingin konsisten
+            data["kuota"] = data["sisa_slot"]
             return data
     return None
 
-def edit_produk(*args, **kwargs):
-    pass
+def edit_produk(kode, nama=None, harga=None, deskripsi=None):
+    kode = kode.lower()
+    custom = load_custom_produk()
+    if kode not in [p["kode"].lower() for p in LIST_PRODUK_TETAP]:
+        return False
+    if kode not in custom:
+        custom[kode] = {}
+    if nama is not None:
+        custom[kode]["nama"] = nama
+    if harga is not None:
+        custom[kode]["harga"] = harga
+    if deskripsi is not None:
+        custom[kode]["deskripsi"] = deskripsi
+    save_custom_produk(custom)
+    return True
