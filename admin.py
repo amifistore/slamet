@@ -4,6 +4,7 @@ from typing import List, Optional
 from pydantic import BaseModel
 from fastapi.security import OAuth2PasswordBearer
 import jwt
+from jwt import PyJWTError
 
 from db import get_db, User, Transaction  # sesuaikan dengan project Anda
 
@@ -71,7 +72,7 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
         if user is None:
             raise HTTPException(status_code=404, detail="User not found")
         return user
-    except jwt.PyJWTError:
+    except PyJWTError:
         raise HTTPException(status_code=401, detail="Invalid token")
 
 def admin_required(current_user: User = Depends(get_current_user)):
@@ -86,9 +87,7 @@ def list_users(
     db: Session = Depends(get_db),
     current_user: User = Depends(admin_required)
 ):
-    """
-    List all users (admin only)
-    """
+    """List all users (admin only)"""
     return db.query(User).all()
 
 @router.post("/users", response_model=UserAdminOut)
@@ -97,9 +96,7 @@ def create_user(
     db: Session = Depends(get_db),
     current_user: User = Depends(admin_required)
 ):
-    """
-    Create a new user (admin only)
-    """
+    """Create a new user (admin only)"""
     if db.query(User).filter_by(username=request.username).first():
         raise HTTPException(status_code=400, detail="Username sudah terdaftar")
     from passlib.context import CryptContext
@@ -130,9 +127,7 @@ def edit_user(
     db: Session = Depends(get_db),
     current_user: User = Depends(admin_required)
 ):
-    """
-    Edit user (admin only)
-    """
+    """Edit user (admin only)"""
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User tidak ditemukan")
@@ -153,9 +148,7 @@ def delete_user(
     db: Session = Depends(get_db),
     current_user: User = Depends(admin_required)
 ):
-    """
-    Delete user (admin only)
-    """
+    """Delete user (admin only)"""
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User tidak ditemukan")
@@ -174,9 +167,7 @@ def edit_kuota(
     db: Session = Depends(get_db),
     current_user: User = Depends(admin_required)
 ):
-    """
-    Edit quota user (admin only)
-    """
+    """Edit quota user (admin only)"""
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User tidak ditemukan")
@@ -196,9 +187,7 @@ def list_all_transaction(
     db: Session = Depends(get_db),
     current_user: User = Depends(admin_required)
 ):
-    """
-    List all transactions (admin only)
-    """
+    """List all transactions (admin only)"""
     q = db.query(Transaction)
     if user_id:
         q = q.filter(Transaction.user_id == user_id)
@@ -210,9 +199,7 @@ def aktifkan_user(
     db: Session = Depends(get_db),
     current_user: User = Depends(admin_required)
 ):
-    """
-    Activate user (admin only)
-    """
+    """Activate user (admin only)"""
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User tidak ditemukan")
@@ -232,9 +219,7 @@ def nonaktifkan_user(
     db: Session = Depends(get_db),
     current_user: User = Depends(admin_required)
 ):
-    """
-    Deactivate user (admin only)
-    """
+    """Deactivate user (admin only)"""
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User tidak ditemukan")
