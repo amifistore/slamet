@@ -1,4 +1,6 @@
-from telegram.ext import Updater, CommandHandler, CallbackQueryHandler, MessageHandler, Filters, ConversationHandler
+from telegram.ext import (
+    Updater, CommandHandler, CallbackQueryHandler, MessageHandler, Filters, ConversationHandler
+)
 from config import TOKEN
 from handlers import (
     start, main_menu_callback, produk_pilih_callback, input_tujuan_step, konfirmasi_step,
@@ -10,8 +12,10 @@ def main():
     updater = Updater(TOKEN, use_context=True)
     dp = updater.dispatcher
 
+    # ConversationHandler untuk alur menu utama & admin edit produk
     conv_handler = ConversationHandler(
         entry_points=[
+            # Entry point untuk menu utama: beli produk, topup, manajemen produk
             CallbackQueryHandler(main_menu_callback, pattern="^(beli_produk|topup|manajemen_produk)$"),
         ],
         states={
@@ -25,10 +29,14 @@ def main():
         allow_reentry=True,
     )
 
+    # Handler utama
     dp.add_handler(CommandHandler("start", start))
     dp.add_handler(conv_handler)
+    # Handler untuk menu selain entry point utama
     dp.add_handler(CallbackQueryHandler(main_menu_callback))
+    # Handler fallback untuk semua pesan teks selain dalam percakapan ConversationHandler
     dp.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_text))
+
     updater.start_polling()
     updater.idle()
 
