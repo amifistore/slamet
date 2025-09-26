@@ -81,14 +81,25 @@ def admin_required(current_user: User = Depends(get_current_user)):
 
 # ========== ENDPOINTS ADMIN ==========
 
-# List all users
 @router.get("/users", response_model=List[UserAdminOut])
-def list_users(db: Session = Depends(get_db), current_user: User = Depends(admin_required)):
+def list_users(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(admin_required)
+):
+    """
+    List all users (admin only)
+    """
     return db.query(User).all()
 
-# Create user
 @router.post("/users", response_model=UserAdminOut)
-def create_user(request: CreateUserRequest, db: Session = Depends(get_db), current_user: User = Depends(admin_required)):
+def create_user(
+    request: CreateUserRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(admin_required)
+):
+    """
+    Create a new user (admin only)
+    """
     if db.query(User).filter_by(username=request.username).first():
         raise HTTPException(status_code=400, detail="Username sudah terdaftar")
     from passlib.context import CryptContext
@@ -103,12 +114,15 @@ def create_user(request: CreateUserRequest, db: Session = Depends(get_db), curre
         role=request.role,
         is_active=request.is_active
     )
-    db.add(new_user)
-    db.commit()
-    db.refresh(new_user)
-    return new_user
+    try:
+        db.add(new_user)
+        db.commit()
+        db.refresh(new_user)
+        return new_user
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Gagal membuat user: {e}")
 
-# Edit user (by id)
 @router.put("/users/{user_id}", response_model=UserAdminOut)
 def edit_user(
     user_id: int,
@@ -116,31 +130,43 @@ def edit_user(
     db: Session = Depends(get_db),
     current_user: User = Depends(admin_required)
 ):
+    """
+    Edit user (admin only)
+    """
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User tidak ditemukan")
     for attr, value in request.dict(exclude_unset=True).items():
         setattr(user, attr, value)
-    db.add(user)
-    db.commit()
-    db.refresh(user)
-    return user
+    try:
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+        return user
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Gagal edit user: {e}")
 
-# Hapus user
 @router.delete("/users/{user_id}")
 def delete_user(
     user_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(admin_required)
 ):
+    """
+    Delete user (admin only)
+    """
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User tidak ditemukan")
-    db.delete(user)
-    db.commit()
-    return {"msg": "User berhasil dihapus"}
+    try:
+        db.delete(user)
+        db.commit()
+        return {"msg": "✅ User berhasil dihapus"}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Gagal hapus user: {e}")
 
-# Edit kuota user (by id, endpoint khusus)
 @router.put("/users/{user_id}/kuota", response_model=UserAdminOut)
 def edit_kuota(
     user_id: int,
@@ -148,42 +174,57 @@ def edit_kuota(
     db: Session = Depends(get_db),
     current_user: User = Depends(admin_required)
 ):
+    """
+    Edit quota user (admin only)
+    """
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User tidak ditemukan")
     user.kuota = req.kuota
-    db.add(user)
-    db.commit()
-    db.refresh(user)
-    return user
+    try:
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+        return user
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Gagal update kuota: {e}")
 
-# List transaksi semua user / per user
 @router.get("/transaksi", response_model=List[TransactionAdminOut])
 def list_all_transaction(
     user_id: Optional[int] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(admin_required)
 ):
+    """
+    List all transactions (admin only)
+    """
     q = db.query(Transaction)
     if user_id:
         q = q.filter(Transaction.user_id == user_id)
     return q.order_by(Transaction.timestamp.desc()).all()
 
-# (Optional) Aktif/nonaktifkan user
 @router.put("/users/{user_id}/aktifkan", response_model=UserAdminOut)
 def aktifkan_user(
     user_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(admin_required)
 ):
+    """
+    Activate user (admin only)
+    """
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User tidak ditemukan")
     user.is_active = True
-    db.add(user)
-    db.commit()
-    db.refresh(user)
-    return user
+    try:
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+        return user
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Gagal aktifkan user: {e}")
 
 @router.put("/users/{user_id}/nonaktifkan", response_model=UserAdminOut)
 def nonaktifkan_user(
@@ -191,11 +232,18 @@ def nonaktifkan_user(
     db: Session = Depends(get_db),
     current_user: User = Depends(admin_required)
 ):
+    """
+    Deactivate user (admin only)
+    """
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User tidak ditemukan")
     user.is_active = False
-    db.add(user)
-    db.commit()
-    db.refresh(user)
-    return user
+    try:
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+        return user
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Gagal nonaktifkan user: {e}")
