@@ -1,15 +1,15 @@
 import requests
-import json
-import os
 import base64
-import io
-import tempfile
 import re
 from typing import Dict, Optional, Union, Any
+import io
+import tempfile
+import os
 
 class QRISGenerator:
     """
-    QRIS Generator untuk handle pembuatan QRIS dinamis dari QRISKU API.
+    QRIS Generator untuk handle pembuatan QRIS dinamis/statik.
+    Bisa menghasilkan base64, BytesIO (untuk upload Telegram), atau file PNG sementara.
     """
 
     def __init__(
@@ -26,7 +26,7 @@ class QRISGenerator:
         )
 
     def _clean_base64(self, base64_string: str) -> str:
-        """Bersihkan base64 string (whitespace, padding, karakter non-base64)"""
+        """Membersihkan dan memperbaiki base64 (whitespace, padding, karakter non-base64)."""
         if not base64_string:
             return ""
         cleaned = re.sub(r'[^A-Za-z0-9+/]', '', base64_string)
@@ -35,8 +35,14 @@ class QRISGenerator:
             cleaned += '=' * (4 - padding_needed)
         return cleaned
 
-    def generate_qris(self, nominal: Union[int, str], qris_statis: Optional[str] = None) -> Dict[str, Any]:
-        """Generate QRIS dinamis dan return dict hasil API."""
+    def generate_qris(
+        self,
+        nominal: Union[int, str],
+        qris_statis: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Generate QRIS dinamis dengan nominal tertentu.
+        """
         qris_statis = qris_statis or self.qris_statis_default
         if not qris_statis:
             return {"status": "error", "message": "QRIS statis tidak tersedia"}
@@ -44,10 +50,12 @@ class QRISGenerator:
             nominal_int = int(nominal)
             if nominal_int < 1000:
                 return {"status": "error", "message": "Nominal minimal Rp 1.000"}
-        except Exception:
+        except (ValueError, TypeError):
             return {"status": "error", "message": "Nominal harus berupa angka"}
+
         payload = {"amount": str(nominal_int), "qris_statis": qris_statis.strip()}
         headers = {"Content-Type": "application/json"}
+
         try:
             response = requests.post(self.api_url, json=payload, headers=headers, timeout=self.timeout)
             response.raise_for_status()
@@ -55,7 +63,7 @@ class QRISGenerator:
             if isinstance(data, dict) and data.get("status") == "success" and "qris_base64" in data:
                 cleaned_base64 = self._clean_base64(data["qris_base64"])
                 if not cleaned_base64:
-                    return {"status": "error", "message": "Invalid base64 data"}
+                    return {"status": "error", "message": "Invalid base64 data received"}
                 return {
                     "status": "success",
                     "message": data.get("message", "QRIS berhasil digenerate"),
@@ -72,12 +80,15 @@ class QRISGenerator:
             return {"status": "error", "message": f"Error: {str(e)}"}
 
     def get_qris_bytesio(self, nominal: Union[int, str], qris_statis: Optional[str] = None) -> Optional[io.BytesIO]:
-        """Generate QRIS dan return BytesIO PNG. Return None jika gagal."""
-        hasil = self.generate_qris(nominal, qris_statis)
-        if hasil["status"] != "success":
-            print(f"[QRIS] Gagal generate: {hasil['message']}")
+        """
+        Generate QRIS dan return BytesIO PNG (siap upload Telegram).
+        Return None jika gagal.
+        """
+        result = self.generate_qris(nominal, qris_statis)
+        if result["status"] != "success":
+            print(f"[QRIS] Gagal generate: {result['message']}")
             return None
-        qris_base64 = hasil["qris_base64"]
+        qris_base64 = result["qris_base64"]
         cleaned_base64 = self._clean_base64(qris_base64)
         try:
             qris_bytes = base64.b64decode(cleaned_base64)
@@ -89,89 +100,44 @@ class QRISGenerator:
             print(f"[QRIS] Error decode base64: {e}")
             return None
 
-class TelegramQRISSender:
-    """
-    Class untuk mengirim gambar QRIS ke Telegram (dari base64 PNG).
-    """
-
-    def __init__(self, bot_token: str):
-        self.bot_token = bot_token
-        self.base_url = f"https://api.telegram.org/bot{bot_token}"
-        self.qris_generator = QRISGenerator()
-
-    def verify_bot_token(self) -> bool:
-        """Cek apakah token bot valid."""
+    def generate_qris_image_file(self, nominal: Union[int, str], qris_statis: Optional[str] = None) -> Optional[str]:
+        """
+        Generate QRIS dan simpan ke file temporary (PNG), return path file.
+        Return None jika gagal.
+        """
+        bio = self.get_qris_bytesio(nominal, qris_statis)
+        if not bio:
+            return None
         try:
-            response = requests.get(f"{self.base_url}/getMe", timeout=10)
-            return response.json().get("ok", False)
-        except:
-            return False
-
-    def send_photo(self, chat_id: str, image_bytesio: io.BytesIO, caption: str = "") -> dict:
-        """Kirim image BytesIO sebagai foto ke Telegram."""
-        files = {'photo': ('qris.png', image_bytesio, 'image/png')}
-        data = {
-            'chat_id': chat_id,
-            'caption': caption,
-            'parse_mode': 'HTML'
-        }
-        url = f"{self.base_url}/sendPhoto"
-        try:
-            resp = requests.post(url, data=data, files=files, timeout=20)
-            return resp.json()
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as temp_file:
+                temp_path = temp_file.name
+                temp_file.write(bio.read())
+            if os.path.exists(temp_path) and os.path.getsize(temp_path) > 0:
+                return temp_path
+            if os.path.exists(temp_path):
+                os.unlink(temp_path)
+            return None
         except Exception as e:
-            return {"ok": False, "description": f"Telegram request error: {str(e)}"}
+            print(f"[QRIS] Error create temp file: {e}")
+            if 'temp_path' in locals() and os.path.exists(temp_path):
+                os.unlink(temp_path)
+            return None
 
-    def send_document(self, chat_id: str, image_bytesio: io.BytesIO, caption: str = "") -> dict:
-        """Kirim image BytesIO sebagai dokumen ke Telegram (fallback)."""
-        files = {'document': ('qris.png', image_bytesio, 'image/png')}
-        data = {
-            'chat_id': chat_id,
-            'caption': caption,
-            'parse_mode': 'HTML'
-        }
-        url = f"{self.base_url}/sendDocument"
-        try:
-            resp = requests.post(url, data=data, files=files, timeout=20)
-            return resp.json()
-        except Exception as e:
-            return {"ok": False, "description": f"Telegram request error: {str(e)}"}
+# Fungsi global agar bisa di-import langsung dari file lain!
+def generate_qris(nominal: Union[int, str], qris_statis: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Generate QRIS dinamis (return dict base64, nominal, dsb).
+    """
+    return QRISGenerator().generate_qris(nominal, qris_statis)
 
-    def send_qris_to_telegram(self, chat_id: str, nominal: Union[int, str], caption: str = "", qris_statis: Optional[str] = None) -> dict:
-        """Generate QRIS dan langsung kirim ke Telegram. Ada fallback document."""
-        if not self.verify_bot_token():
-            return {"status": "error", "message": "Bot token tidak valid"}
-        bio = self.qris_generator.get_qris_bytesio(nominal, qris_statis)
-        if bio is None:
-            return {"status": "error", "message": "Gagal generate QRIS"}
-        final_caption = caption or f"💳 QRIS Payment\n💵 Nominal: Rp {int(nominal):,}\n⏰ Berlaku 24 jam"
-        # Strategy 1: kirim sebagai foto
-        resp = self.send_photo(chat_id, bio, final_caption)
-        if resp.get("ok"):
-            return {"status": "success", "message": "QRIS berhasil dikirim ke Telegram (foto)", "response": resp}
-        # Fallback: kirim sebagai dokumen
-        bio.seek(0)
-        resp2 = self.send_document(chat_id, bio, final_caption)
-        if resp2.get("ok"):
-            return {"status": "success", "message": "QRIS berhasil dikirim ke Telegram (dokumen)", "response": resp2}
-        return {"status": "error", "message": f"Telegram API error: {resp2.get('description', 'Unknown error')}", "response": resp2}
+def get_qris_bytesio(nominal: Union[int, str], qris_statis: Optional[str] = None) -> Optional[io.BytesIO]:
+    """
+    Generate QRIS dan return BytesIO PNG (siap upload Telegram).
+    """
+    return QRISGenerator().get_qris_bytesio(nominal, qris_statis)
 
-# =========================
-# CONTOH PENGGUNAAN
-# =========================
-
-if __name__ == "__main__":
-    BOT_TOKEN = "ISI_TOKEN_BOT_ANDA"
-    CHAT_ID = "ISI_CHAT_ID_ANDA"
-
-    if BOT_TOKEN.startswith("ISI_") or CHAT_ID.startswith("ISI_"):
-        print("❌ Silakan isi BOT_TOKEN dan CHAT_ID yang benar!")
-        exit(1)
-
-    sender = TelegramQRISSender(BOT_TOKEN)
-    res = sender.send_qris_to_telegram(
-        chat_id=CHAT_ID,
-        nominal=15000,
-        caption="🔰 QRIS Dinamis langsung dari Python"
-    )
-    print(res)
+def generate_qris_image_file(nominal: Union[int, str], qris_statis: Optional[str] = None) -> Optional[str]:
+    """
+    Generate QRIS dan simpan ke file temporary (PNG), return path file.
+    """
+    return QRISGenerator().generate_qris_image_file(nominal, qris_statis)
