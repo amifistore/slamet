@@ -2,7 +2,6 @@ import requests
 import json
 import os
 
-# Lokasi config (ubah sesuai kebutuhan jika file Anda di lokasi berbeda)
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), "config.json")
 
 def get_qris_statis():
@@ -10,12 +9,11 @@ def get_qris_statis():
     try:
         with open(CONFIG_PATH, "r", encoding="utf-8") as f:
             config = json.load(f)
-            return config.get("qris_statis", "")
+            return config.get("QRIS_STATIS", "")
     except Exception as e:
-        print(f"[QRIS] Gagal baca qris_statis dari config: {e}")
+        print(f"[QRIS] Gagal baca QRIS_STATIS dari config: {e}")
         return ""
 
-# Inisialisasi saat modul di-load
 QRIS_STATIS_DEFAULT = get_qris_statis()
 
 def generate_qris(nominal, qris_statis=None):
