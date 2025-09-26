@@ -38,3 +38,19 @@ def load_topup():
 
 def save_topup(topup):
     save_json(TOPUP_FILE, topup)
+
+def format_stock_akrab(json_data):
+    import json as _json
+    if isinstance(json_data, str):
+        json_data = _json.loads(json_data)
+    items = json_data.get("data", [])
+    msg = "<b>📊 Cek Stok Produk Akrab:</b>\n\n"
+    msg += "<b>Kode      | Nama                | Sisa Slot</b>\n"
+    msg += "<pre>"
+    for item in items:
+        kode = item['type'].ljust(8)
+        nama = item['nama'].ljust(20)
+        slot = str(item['sisa_slot']).rjust(4)
+        msg += f"{kode} | {nama} | {slot}\n"
+    msg += "</pre>"
+    return msg
