@@ -2,10 +2,17 @@ import requests
 import json
 import os
 
+import base64
+import io
+
+# Path ke config.json, asumsi 1 folder dengan file ini
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), "config.json")
 
 def get_qris_statis():
-    """Ambil nilai QRIS statis dari config.json."""
+    """
+    Ambil nilai QRIS statis dari config.json.
+    Key harus 'QRIS_STATIS' sesuai dengan config user.
+    """
     try:
         with open(CONFIG_PATH, "r", encoding="utf-8") as f:
             config = json.load(f)
@@ -18,22 +25,12 @@ QRIS_STATIS_DEFAULT = get_qris_statis()
 
 def generate_qris(nominal, qris_statis=None):
     """
-    Mengirim permintaan ke API QRIS Dinamis Generator untuk membuat kode QRIS base64.
+    Memanggil API QRIS Dinamis Generator untuk membuat QR berbasis nominal & QRIS statis merchant.
     Args:
-        nominal (int|str): Nominal top up (minimal 10000, dalam satuan rupiah)
-        qris_statis (str): Kode QRIS statis merchant (jika None, pakai dari config)
+        nominal (int|str): Nominal dalam rupiah, minimal 10000.
+        qris_statis (str|None): QRIS statis merchant, jika None ambil dari config.
     Returns:
-        dict: response JSON, misal:
-            {
-                "status": "success",
-                "message": "QRIS berhasil dihasilkan",
-                "qris_base64": "BASE64_ENCODED_QR_CODE_HERE"
-            }
-            atau:
-            {
-                "status": "error",
-                "message": "..."
-            }
+        dict: Hasil request, minimal ada key: status, message, qris_base64 (jika sukses)
     """
     url = "https://qrisku.my.id/api"
     if not qris_statis:
@@ -42,7 +39,7 @@ def generate_qris(nominal, qris_statis=None):
         return {"status": "error", "message": "QRIS statis tidak tersedia di config.json"}
     payload = {
         "amount": str(nominal),
-        "qris_statis": qris_statis
+        "qris_statis": qris_statis.strip()
     }
     headers = {
         "Content-Type": "application/json"
@@ -69,3 +66,17 @@ def generate_qris(nominal, qris_statis=None):
         return {"status": "error", "message": f"Gagal request QRIS API: {str(e)}"}
     except Exception as e:
         return {"status": "error", "message": f"Error: {str(e)}"}
+
+def qris_base64_to_bytesio(qris_base64: str):
+    """
+    Utility untuk decode base64 QRIS menjadi objek BytesIO siap kirim ke Telegram.
+    """
+    try:
+        qris_bytes = base64.b64decode(qris_base64)
+        bio = io.BytesIO(qris_bytes)
+        bio.name = "qris.png"
+        bio.seek(0)
+        return bio
+    except Exception as e:
+        print(f"[QRIS] Error decode base64: {e}")
+        return None
