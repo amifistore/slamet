@@ -1,8 +1,50 @@
+import os
+import json
+
+SALDO_FILE = 'saldo.json'
+RIWAYAT_FILE = 'riwayat_transaksi.json'
+HARGA_PRODUK_FILE = 'harga_produk.json'
+TOPUP_FILE = 'topup_user.json'
+
+def load_json(filename, fallback=None):
+    if os.path.exists(filename):
+        try:
+            with open(filename) as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return fallback if fallback is not None else {}
+
+def save_json(filename, data):
+    with open(filename, "w") as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
+
+def get_saldo():
+    return load_json(SALDO_FILE, 500000)
+
+def set_saldo(amount):
+    save_json(SALDO_FILE, amount)
+
+def load_riwayat():
+    return load_json(RIWAYAT_FILE, {})
+
+def save_riwayat(riwayat):
+    save_json(RIWAYAT_FILE, riwayat)
+
+def load_harga_produk():
+    return load_json(HARGA_PRODUK_FILE, {})
+
+def save_harga_produk(harga_produk):
+    save_json(HARGA_PRODUK_FILE, harga_produk)
+
+def load_topup():
+    return load_json(TOPUP_FILE, {})
+
+def save_topup(topup):
+    save_json(TOPUP_FILE, topup)
+
 def format_stock_akrab(json_data):
     import json as _json
-    # HAPUS ATAU KOMENTARI filter HTML di bawah:
-    # if isinstance(json_data, str) and "<html" in json_data.lower():
-    #     return "<b>❌ Provider error (balikkan HTML). Cek server provider!</b>"
     if not json_data or (isinstance(json_data, str) and not json_data.strip()):
         return "<b>❌ Gagal mengambil data stok dari provider.</b>\nSilakan cek koneksi/API provider."
     if isinstance(json_data, dict):
@@ -11,7 +53,6 @@ def format_stock_akrab(json_data):
         try:
             data = _json.loads(json_data)
         except Exception as e:
-            # Jika provider membalas HTML, yang keluar hanya error parsing saja
             return f"<b>❌ Error parsing data stok:</b>\n<pre>{e}\n{json_data}</pre>"
     items = data.get("data", [])
     if not items:
