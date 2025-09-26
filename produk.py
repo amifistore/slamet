@@ -1,7 +1,6 @@
 import json
 from provider import cek_stock_akrab
-
-PRODUK_CUSTOM_FILE = "produk_custom.json"
+from db import get_all_produk_admin, set_produk_admin_harga, set_produk_admin_deskripsi
 
 LIST_PRODUK_TETAP = [
     {"kode": "bpal1",    "nama": "Bonus Akrab L - 1 hari",   "harga": 5000,  "deskripsi": "Paket harian murah"},
@@ -31,16 +30,14 @@ LIST_PRODUK_TETAP = [
     {"kode": "XLA89",    "nama": "MegaBig",                  "harga": 89000, "deskripsi": "MegaBig super paket"}
 ]
 
-def load_custom_produk():
-    try:
-        with open(PRODUK_CUSTOM_FILE) as f:
-            return json.load(f)
-    except Exception:
-        return {}
-
-def save_custom_produk(data):
-    with open(PRODUK_CUSTOM_FILE, "w") as f:
-        json.dump(data, f, indent=2, ensure_ascii=False)
+def get_all_custom_produk():
+    """
+    Ambil semua custom produk dari database (produk_admin)
+    Return dict: {kode: {harga:..., deskripsi:...}, ...}
+    """
+    custom = get_all_produk_admin()
+    # Convert all keys to lower for consistency
+    return {k.lower(): v for k,v in custom.items()}
 
 def get_list_stok_fixed():
     stok_raw = cek_stock_akrab()
@@ -50,13 +47,17 @@ def get_list_stok_fixed():
     except Exception:
         slot_map = {}
 
-    custom = load_custom_produk()
+    custom = get_all_custom_produk()
     output = []
     for p in LIST_PRODUK_TETAP:
         kode = p["kode"].lower()
         produk = p.copy()
+        # Override custom from DB, only if exists and value is not None/empty
         if kode in custom:
-            produk.update(custom[kode])  # Penting: override dengan custom!
+            if custom[kode].get("harga") is not None:
+                produk["harga"] = custom[kode]["harga"]
+            if custom[kode].get("deskripsi"):
+                produk["deskripsi"] = custom[kode]["deskripsi"]
         produk["sisa_slot"] = slot_map.get(kode, 0)
         produk["kuota"] = produk["sisa_slot"]
         output.append(produk)
@@ -79,13 +80,16 @@ def format_list_stok_fixed():
 
 def get_produk_by_kode(kode):
     kode = kode.lower()
-    custom = load_custom_produk()
+    custom = get_all_custom_produk()
     stok_map = {p['kode']: p['sisa_slot'] for p in get_list_stok_fixed()}
     for produk in LIST_PRODUK_TETAP:
         if produk["kode"].lower() == kode:
             data = produk.copy()
             if kode in custom:
-                data.update(custom[kode])  # Penting: override dengan custom!
+                if custom[kode].get("harga") is not None:
+                    data["harga"] = custom[kode]["harga"]
+                if custom[kode].get("deskripsi"):
+                    data["deskripsi"] = custom[kode]["deskripsi"]
             data["sisa_slot"] = stok_map.get(kode, 0)
             data["kuota"] = data["sisa_slot"]
             return data
@@ -93,16 +97,11 @@ def get_produk_by_kode(kode):
 
 def edit_produk(kode, nama=None, harga=None, deskripsi=None):
     kode = kode.lower()
-    custom = load_custom_produk()
-    if kode not in [p["kode"].lower() for p in LIST_PRODUK_TETAP]:
-        return False
-    if kode not in custom:
-        custom[kode] = {}
-    if nama is not None:
-        custom[kode]["nama"] = nama
+    # Only edit harga/deskripsi ke DB. Nama tetap dari LIST_PRODUK_TETAP,
+    # Jika ingin edit nama juga, perlu tambah kolom nama di produk_admin dan fungsi set_produk_admin_nama
     if harga is not None:
-        custom[kode]["harga"] = harga
+        set_produk_admin_harga(kode, harga)
     if deskripsi is not None:
-        custom[kode]["deskripsi"] = deskripsi
-    save_custom_produk(custom)
+        set_produk_admin_deskripsi(kode, deskripsi)
+    # Edit nama produk hanya bisa jika kamu tambahkan kolom nama di db dan set_produk_admin_nama!
     return True
