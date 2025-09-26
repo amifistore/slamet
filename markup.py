@@ -42,9 +42,7 @@ def produk_inline_keyboard():
 
 def admin_edit_produk_keyboard(kode):
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("Edit Nama", callback_data=f"editnama|{kode}"),
-         InlineKeyboardButton("Edit Harga", callback_data=f"editharga|{kode}")],
-        [InlineKeyboardButton("Edit Kuota", callback_data=f"editkuota|{kode}"),
+        [InlineKeyboardButton("Edit Harga", callback_data=f"editharga|{kode}"),
          InlineKeyboardButton("Edit Deskripsi", callback_data=f"editdeskripsi|{kode}")],
         [InlineKeyboardButton("⬅️ Kembali", callback_data="manajemen_produk")]
     ])
