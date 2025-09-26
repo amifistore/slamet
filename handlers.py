@@ -6,7 +6,7 @@ from provider_qris import generate_qris
 from markup import get_menu, produk_inline_keyboard, admin_edit_produk_keyboard, is_admin
 from produk import get_produk_list, edit_produk, get_produk_by_kode
 from utils import (
-    get_saldo, set_saldo, load_riwayat, save_riwayat, load_topup, save_topup
+    get_saldo, set_saldo, load_riwayat, save_riwayat, load_topup, save_topup, format_stock_akrab
 )
 
 CHOOSING_PRODUK, INPUT_TUJUAN, KONFIRMASI, TOPUP_NOMINAL, ADMIN_EDIT = range(5)
@@ -44,7 +44,8 @@ def main_menu_callback(update: Update, context: CallbackContext):
     elif data == 'riwayat':
         riwayat_user(query, context)
     elif data == 'stock_akrab':
-        msg = cek_stock_akrab()
+        raw = cek_stock_akrab()
+        msg = format_stock_akrab(raw)
         query.edit_message_text(msg, parse_mode="HTML", reply_markup=get_menu(user.id))
     elif data == 'semua_riwayat' and is_admin(user.id):
         semua_riwayat(query, context)
@@ -204,7 +205,6 @@ def topup_nominal_step(update: Update, context: CallbackContext):
         return TOPUP_NOMINAL
     context.user_data["topup_nominal"] = nominal
 
-    # Generate QRIS dinamis
     resp = generate_qris(nominal)
     if resp.get("status") != "success":
         update.message.reply_text(f"Gagal generate QRIS: {resp.get('message')}")
@@ -215,9 +215,6 @@ def topup_nominal_step(update: Update, context: CallbackContext):
         update.message.reply_photo(photo=f"data:image/png;base64,{qris_base64}", caption=msg, parse_mode=ParseMode.HTML)
     else:
         update.message.reply_text(msg, parse_mode=ParseMode.HTML)
-    # Simpan riwayat top up jika perlu (topup_user.json)
-    # topup_data = load_topup()
-    # ... tambahkan logika penyimpanan jika ingin tracking/approval
     return ConversationHandler.END
 
 def riwayat_user(query, context):
