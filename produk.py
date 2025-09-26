@@ -37,7 +37,6 @@ LIST_PRODUK_TETAP = [
 CUSTOM_FILE = "produk_custom.json"
 
 def load_custom_produk():
-    """Load custom produk dari file JSON"""
     try:
         if os.path.exists(CUSTOM_FILE):
             with open(CUSTOM_FILE, "r", encoding="utf-8") as f:
@@ -48,7 +47,6 @@ def load_custom_produk():
         return {}
 
 def save_custom_produk(data):
-    """Simpan custom produk ke file JSON"""
     try:
         with open(CUSTOM_FILE, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
@@ -58,16 +56,11 @@ def save_custom_produk(data):
         return False
 
 def get_all_custom_produk():
-    """
-    Ambil semua custom produk dari file produk_custom.json
-    Return dict: {kode: {harga:..., deskripsi:...}, ...}
-    """
     try:
         data = load_custom_produk()
         result = {}
         for k, v in data.items():
             if isinstance(v, dict):
-                # Copy semua field kecuali 'nama' karena sudah ada di LIST_PRODUK_TETAP
                 v_copy = v.copy()
                 v_copy.pop("nama", None)
                 result[k.lower()] = v_copy
@@ -77,11 +70,8 @@ def get_all_custom_produk():
         return {}
 
 def parse_stock_from_provider():
-    """Parse stock dari provider dengan error handling"""
     try:
         stok_raw = cek_stock_akrab()
-        
-        # Handle berbagai format response
         if isinstance(stok_raw, dict):
             stok_data = stok_raw
         elif isinstance(stok_raw, str):
@@ -92,15 +82,12 @@ def parse_stock_from_provider():
         else:
             logger.warning(f"Unexpected stock format: {type(stok_raw)}")
             return {}
-            
-        # Extract stock data
         if "data" in stok_data and isinstance(stok_data["data"], list):
             slot_map = {}
             for item in stok_data["data"]:
                 if isinstance(item, dict) and "type" in item:
                     product_type = item["type"].lower()
                     sisa_slot = item.get("sisa_slot", 0)
-                    # Convert to int jika mungkin
                     try:
                         sisa_slot = int(sisa_slot) if sisa_slot not in [None, ""] else 0
                     except (ValueError, TypeError):
@@ -113,20 +100,13 @@ def parse_stock_from_provider():
         return {}
 
 def get_list_stok_fixed():
-    """Dapatkan list produk dengan stock terupdate dari provider"""
     try:
-        # Dapatkan stock dari provider
         slot_map = parse_stock_from_provider()
-        
-        # Dapatkan custom harga/deskripsi
         custom_data = get_all_custom_produk()
-        
         output = []
         for produk in LIST_PRODUK_TETAP:
             kode = produk["kode"].lower()
             produk_copy = produk.copy()
-            
-            # Apply custom data jika ada
             if kode in custom_data:
                 custom = custom_data[kode]
                 if custom.get("harga") is not None:
@@ -134,35 +114,25 @@ def get_list_stok_fixed():
                         produk_copy["harga"] = int(custom["harga"])
                     except (ValueError, TypeError):
                         logger.warning(f"Invalid harga for {kode}: {custom.get('harga')}")
-                
                 if custom.get("deskripsi"):
                     produk_copy["deskripsi"] = custom["deskripsi"]
-            
-            # Update stock/kuota
             produk_copy["sisa_slot"] = slot_map.get(kode, 0)
-            produk_copy["kuota"] = produk_copy["sisa_slot"]  # Sesuai dengan kode sebelumnya
-            
+            produk_copy["kuota"] = produk_copy["sisa_slot"]
             output.append(produk_copy)
-            
         return output
     except Exception as e:
         logger.error(f"Error getting product list with stock: {e}")
-        # Fallback ke list produk tetap tanpa stock
         return LIST_PRODUK_TETAP.copy()
 
 def get_produk_list():
-    """Interface function untuk compatibility dengan kode sebelumnya"""
     return get_list_stok_fixed()
 
 def get_produk_by_kode(kode):
-    """Dapatkan produk berdasarkan kode"""
     if not kode:
         return None
-        
     try:
         kode = kode.lower()
         all_products = get_list_stok_fixed()
-        
         for produk in all_products:
             if produk["kode"].lower() == kode:
                 return produk
@@ -172,80 +142,62 @@ def get_produk_by_kode(kode):
         return None
 
 def edit_produk(kode, harga=None, deskripsi=None):
-    """Edit produk (harga/deskripsi)"""
     if not kode:
         return False
-        
     try:
         kode = kode.lower()
         custom_data = load_custom_produk()
-        
-        # Pastikan kode ada dalam custom data atau buat entry baru
         if kode not in custom_data:
             custom_data[kode] = {}
-        
-        # Update harga jika provided
         if harga is not None:
             try:
                 custom_data[kode]["harga"] = int(harga)
             except (ValueError, TypeError):
                 return False
-        
-        # Update deskripsi jika provided
         if deskripsi is not None:
             custom_data[kode]["deskripsi"] = deskripsi.strip()
-        
         return save_custom_produk(custom_data)
     except Exception as e:
         logger.error(f"Error editing product {kode}: {e}")
         return False
 
 def format_list_stok_fixed():
-    """Format list produk untuk display (optional, untuk compatibility)"""
     try:
         items = get_list_stok_fixed()
         msg = "<b>Daftar Produk Tersedia:</b>\n\n"
-        
         for item in items:
             status = "✅ Tersedia" if item['sisa_slot'] > 0 else "❌ Habis"
             msg += f"<code>{item['kode']}</code> | {item['nama']}\n"
             msg += f"💰 Rp {item['harga']:,} | 📦 {item['sisa_slot']} slot | {status}\n"
             msg += f"📝 {item['deskripsi']}\n\n"
-            
         return msg
     except Exception as e:
         logger.error(f"Error formatting product list: {e}")
         return "❌ Gagal memuat daftar produk."
 
-# Fungsi tambahan untuk admin panel
 def get_produk_list_for_admin():
-    """Dapatkan list produk untuk admin panel dengan info lengkap"""
     try:
         products = get_list_stok_fixed()
         custom_data = get_all_custom_produk()
-        
         result = []
         for p in products:
             kode = p["kode"].lower()
             product_info = p.copy()
             product_info["is_customized"] = kode in custom_data
             result.append(product_info)
-            
         return result
     except Exception as e:
         logger.error(f"Error getting product list for admin: {e}")
         return []
 
 def reset_produk_custom(kode):
-    """Reset custom setting produk ke default"""
     try:
         kode = kode.lower()
         custom_data = load_custom_produk()
-        
         if kode in custom_data:
             del custom_data[kode]
             return save_custom_produk(custom_data)
-        return True  # Already not in custom data
+        return True
     except Exception as e:
         logger.error(f"Error resetting product {kode}: {e}")
         return False
