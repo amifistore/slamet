@@ -74,3 +74,8 @@ def get_produk_by_kode(kode):
 def edit_produk(*args, **kwargs):
     # Tidak bisa edit produk jika produk mengikuti provider/daftar tetap.
     pass
+def get_produk_list():
+    """
+    Alias agar tetap kompatibel dengan import lama.
+    """
+    return get_list_stok_fixed()
