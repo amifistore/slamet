@@ -45,7 +45,7 @@ def save_topup(topup):
 
 def format_stock_akrab(json_data):
     import json as _json
-    # Filter balasan provider yang berupa HTML error!
+    # Blok balasan HTML error dari provider!
     if isinstance(json_data, str) and "<html" in json_data.lower():
         return "<b>❌ Provider error (balikkan HTML). Cek server provider!</b>"
     if not json_data or (isinstance(json_data, str) and not json_data.strip()):
