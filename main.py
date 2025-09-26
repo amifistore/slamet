@@ -1,38 +1,35 @@
-from telegram.ext import Updater, CommandHandler, CallbackQueryHandler, MessageHandler, Filters, ConversationHandler
-from config import TOKEN
-from handlers import (
-    start, main_menu_callback, produk_pilih_callback, input_tujuan_step, konfirmasi_step,
-    topup_nominal_step, admin_edit_produk_step, handle_text,
-    CHOOSING_PRODUK, INPUT_TUJUAN, KONFIRMASI, TOPUP_NOMINAL, ADMIN_EDIT
+import logging
+from telegram.ext import Updater, MessageHandler, Filters, CommandHandler
+from handler import (
+    start, help_command, handle_text_message, 
+    get_conversation_handler, error_handler
 )
 
+# Setup logging
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO
+)
+logger = logging.getLogger(__name__)
+
 def main():
+    # Ganti dengan token bot Anda
+    TOKEN = "YOUR_BOT_TOKEN_HERE"
+    
     updater = Updater(TOKEN, use_context=True)
-    dp = updater.dispatcher
-
-    # PENTING: mapping ConversationHandler
-    conv_handler = ConversationHandler(
-        entry_points=[
-            CallbackQueryHandler(main_menu_callback, pattern="^(beli_produk|topup|manajemen_produk)$"),
-        ],
-        states={
-            CHOOSING_PRODUK: [CallbackQueryHandler(produk_pilih_callback, pattern="^produk_static\\|\\d+$")],
-            INPUT_TUJUAN: [MessageHandler(Filters.text & ~Filters.command, input_tujuan_step)],
-            KONFIRMASI: [MessageHandler(Filters.text & ~Filters.command, konfirmasi_step)],
-            TOPUP_NOMINAL: [MessageHandler(Filters.text & ~Filters.command, topup_nominal_step)],
-            ADMIN_EDIT: [MessageHandler(Filters.text & ~Filters.command, admin_edit_produk_step)],
-        },
-        fallbacks=[CommandHandler('start', start)],
-        allow_reentry=True,
-    )
-
-    dp.add_handler(CommandHandler("start", start))
-    dp.add_handler(conv_handler)  # <--- HARUS di atas MessageHandler global
-    dp.add_handler(CallbackQueryHandler(main_menu_callback))
-    dp.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_text))  # fallback pesan di luar percakapan
-
+    dispatcher = updater.dispatcher
+    
+    # Add handlers
+    dispatcher.add_handler(CommandHandler("start", start))
+    dispatcher.add_handler(CommandHandler("help", help_command))
+    dispatcher.add_handler(get_conversation_handler())
+    dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_text_message))
+    dispatcher.add_error_handler(error_handler)
+    
+    # Start bot
     updater.start_polling()
+    logger.info("Bot started successfully!")
     updater.idle()
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()
